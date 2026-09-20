@@ -12,7 +12,9 @@ targets:
   Cheatsheet:
     type: application
     platform: macOS
-    sources: [Sources]
+    sources:
+      - Sources
+      - Resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.fabi2418.cheatsheet
@@ -22,3 +24,25 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: 9ZV3YZX4YG
+  CheatsheetTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+      - Sources/Model
+      - Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fabi2418.cheatsheet.tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 9ZV3YZX4YG
+schemes:
+  Cheatsheet:
+    build:
+      targets:
+        Cheatsheet: all
+        CheatsheetTests: [test]
+    test:
+      targets:
+        - CheatsheetTests

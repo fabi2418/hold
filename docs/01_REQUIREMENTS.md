@@ -45,6 +45,7 @@ Aus jedem Reiter lässt sich ein Eintrag in unter 2 Sekunden kopieren (⌘ halte
 - Scan von `~/.claude/skills/*/SKILL.md` beim Start → Name + description automatisch in den Claude-Reiter (Frontmatter parsen; Duplikate per Name erkennen).
 - Einfügen statt nur Kopieren (CGEvent ⌘V simulieren) — zusätzliche Berechtigungsfragen prüfen.
 - Reiter frei konfigurierbar; Export/Import der Library.
+- Sichtbarer Hinweis im Overlay, wenn `library.json` nicht geladen werden konnte (aktuell nur Log, Panel bleibt leer).
 
 ## Edge Cases (aus den SCR-Karten)
 - Auswahl-Index bei Filterwechsel auf gültigen Bereich klemmen; ⌘C ohne sichtbare Zeile: no-op.

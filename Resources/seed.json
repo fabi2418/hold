@@ -1,0 +1,198 @@
+[
+  {
+    "id": "5D980610-23E6-57F1-818E-A68E89BC4A03",
+    "cat": "Git",
+    "group": "Status & Historie",
+    "label": "git status -sb",
+    "desc": "Kurzstatus mit Branch und Ahead/Behind"
+  },
+  {
+    "id": "800EC065-A083-5401-85DD-2B8BC7A210B2",
+    "cat": "Git",
+    "group": "Status & Historie",
+    "label": "git log --oneline --graph -n 20",
+    "desc": "Letzte 20 Commits als kompakter Graph"
+  },
+  {
+    "id": "810604D9-9530-50A7-9564-484E5DD831EF",
+    "cat": "Git",
+    "group": "Status & Historie",
+    "label": "git diff --staged",
+    "desc": "Was geht in den nächsten Commit?"
+  },
+  {
+    "id": "7848773A-76B6-5F6C-A5D0-E84D0F6C0E26",
+    "cat": "Git",
+    "group": "Committen",
+    "label": "git add -p",
+    "desc": "Änderungen stückweise interaktiv stagen"
+  },
+  {
+    "id": "826FBDAF-D489-5872-8D7A-23B406D6D87D",
+    "cat": "Git",
+    "group": "Committen",
+    "label": "git commit -m \"\"",
+    "desc": "Commit mit Nachricht"
+  },
+  {
+    "id": "40222D36-465D-52DB-A436-075053E34EA4",
+    "cat": "Git",
+    "group": "Committen",
+    "label": "git restore --staged ",
+    "desc": "Datei aus dem Staging nehmen"
+  },
+  {
+    "id": "523CF03A-3545-5142-B1D4-807C0ECE52DD",
+    "cat": "Git",
+    "group": "Branches & Remote",
+    "label": "git switch -c ",
+    "desc": "Neuen Branch anlegen und wechseln"
+  },
+  {
+    "id": "F700BA62-0D42-546E-BDB2-07B5622F347C",
+    "cat": "Git",
+    "group": "Branches & Remote",
+    "label": "git pull --rebase",
+    "desc": "Remote holen, eigene Commits oben drauf"
+  },
+  {
+    "id": "5F4B59CC-AC14-5B16-9D9B-524899ED2A22",
+    "cat": "Git",
+    "group": "Branches & Remote",
+    "label": "git push -u origin HEAD",
+    "desc": "Aktuellen Branch erstmals pushen"
+  },
+  {
+    "id": "A1497BB3-D0F4-5ED2-B68E-35B23E1E1B2F",
+    "cat": "Git",
+    "group": "Branches & Remote",
+    "label": "git stash",
+    "desc": "Änderungen zwischenparken"
+  },
+  {
+    "id": "B8186F36-DF03-5601-8094-929E6F5D4C72",
+    "cat": "Claude",
+    "group": "Eigene Skills",
+    "label": "/explain-code ",
+    "desc": "Zerlegt jeden Befehl Baustein für Baustein, mit C als Referenz"
+  },
+  {
+    "id": "FB3CCD2C-CEB0-5A84-859E-B3753BC5AE5E",
+    "cat": "Claude",
+    "group": "Eigene Skills",
+    "label": "/[DEIN-SKILL] ",
+    "desc": "[Was dein Skill macht – eine Zeile]"
+  },
+  {
+    "id": "330D6A3B-27DF-56D9-ABFC-D45D6B2ACBD4",
+    "cat": "Claude",
+    "group": "Claude Code – Session",
+    "label": "/init",
+    "desc": "CLAUDE.md für das Repo anlegen"
+  },
+  {
+    "id": "F39CB23E-B8B5-560D-8E29-0A9FD7F4EE45",
+    "cat": "Claude",
+    "group": "Claude Code – Session",
+    "label": "/context",
+    "desc": "Zeigt, wie voll das Kontextfenster ist"
+  },
+  {
+    "id": "2B35C63E-1372-5C20-9A74-0B50404920C0",
+    "cat": "Claude",
+    "group": "Claude Code – Session",
+    "label": "/compact",
+    "desc": "Kontext zusammenfassen, Session weiterführen"
+  },
+  {
+    "id": "CB94A577-72ED-51B3-85F4-81EDECB8594A",
+    "cat": "Claude",
+    "group": "Claude Code – Session",
+    "label": "/clear",
+    "desc": "Kontext komplett leeren"
+  },
+  {
+    "id": "CDFD82E1-4C0B-5D66-B55F-6C51251A22A6",
+    "cat": "Claude",
+    "group": "Claude Code – Session",
+    "label": "claude --continue",
+    "desc": "Letzte Session im Ordner fortsetzen"
+  },
+  {
+    "id": "3D5D7054-12E7-5E48-811B-1875D1F2929A",
+    "cat": "Claude",
+    "group": "Prompts & Modi",
+    "label": "Abschluss",
+    "desc": "Re-Entry-Prompt: Stand, offene Punkte, nächster Schritt, Dateien"
+  },
+  {
+    "id": "EF3121EF-3702-5314-A788-2B12600DAC12",
+    "cat": "Claude",
+    "group": "Prompts & Modi",
+    "label": "sprint ",
+    "desc": "Langer Arbeitsblock mit Erfolgskriterium und 90-min-Checkpoints"
+  },
+  {
+    "id": "2F338844-09D9-5EA4-8522-FAE350EED876",
+    "cat": "Claude",
+    "group": "Prompts & Modi",
+    "label": "review Prüfe den folgenden Diff auf Bugs, Sicherheitslücken und unnötige Komplexität. Priorisiert nach Schweregrad, kein Rewrite, pro Punkt ein Satz Begründung.",
+    "desc": "Code-Review-Prompt"
+  },
+  {
+    "id": "6FCE4268-766E-5632-AA63-D8C1AAD158F4",
+    "cat": "Python",
+    "group": "Umgebung",
+    "label": "python -m venv .venv",
+    "desc": "Virtuelle Umgebung anlegen"
+  },
+  {
+    "id": "E3B04708-284D-5CAF-8A6B-4CAB8F36EBEA",
+    "cat": "Python",
+    "group": "Umgebung",
+    "label": "source .venv/bin/activate",
+    "desc": "venv in der aktuellen Shell aktivieren"
+  },
+  {
+    "id": "FA46F361-8D70-5977-BA12-0107D9FA4F5F",
+    "cat": "Python",
+    "group": "Umgebung",
+    "label": "pip install -r requirements.txt",
+    "desc": "Abhängigkeiten installieren"
+  },
+  {
+    "id": "F6340DD1-56EF-57F3-9303-8D298F5127FD",
+    "cat": "Python",
+    "group": "Ausführen & Testen",
+    "label": "python -m pytest -x",
+    "desc": "Tests, Stopp beim ersten Fehler"
+  },
+  {
+    "id": "BFC4CFC9-71BA-5964-A73C-0004F2F029DC",
+    "cat": "Python",
+    "group": "Ausführen & Testen",
+    "label": "uvicorn main:app --reload",
+    "desc": "FastAPI lokal mit Auto-Reload starten"
+  },
+  {
+    "id": "59E470C8-54BB-5FF7-9536-926426D30DF2",
+    "cat": "zsh",
+    "group": "Allgemein",
+    "label": "lsof -i :8000",
+    "desc": "Welcher Prozess belegt Port 8000?"
+  },
+  {
+    "id": "57B39E5B-5FCE-5213-B31F-8794C145EC7A",
+    "cat": "zsh",
+    "group": "Allgemein",
+    "label": "pwd | pbcopy",
+    "desc": "Aktuellen Pfad kopieren"
+  },
+  {
+    "id": "0B39FE1A-15C9-5146-94B7-8D5C18281B00",
+    "cat": "zsh",
+    "group": "Allgemein",
+    "label": "open .",
+    "desc": "Ordner im Finder öffnen"
+  }
+]

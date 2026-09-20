@@ -9,9 +9,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statusLine = NSMenuItem(title: "", action: #selector(requestAccessibility), keyEquivalent: "")
     private let panel = OverlayPanel()
     private let monitor = CmdHoldMonitor()
+    private let library = LibraryStore()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log.info("App gestartet (main=\(Thread.isMainThread))")
+        loadLibrary()
         monitor.onOpen = { [panel] in
             log.info("Panel geöffnet (Tap, main=\(Thread.isMainThread))")
             panel.show()
@@ -40,6 +42,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log.info("Accessibility beim Start: trusted=\(trusted)")
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [monitor] timer in
             if monitor.start() { timer.invalidate() }
+        }
+    }
+
+    private func loadLibrary() {
+        do {
+            let seeded = try library.load()
+            log.info("Library geladen: \(self.library.items.count) Einträge, seeded=\(seeded), Pfad=\(self.library.fileURL.path, privacy: .public)")
+        } catch {
+            log.error("Library konnte nicht geladen werden: \(error.localizedDescription, privacy: .public)")
         }
     }
 
