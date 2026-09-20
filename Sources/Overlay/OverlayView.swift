@@ -187,7 +187,16 @@ struct OverlayView: View {
 
     // MARK: - Inhalt
 
+    @ViewBuilder
     private var content: some View {
+        if model.isImporting {
+            importView
+        } else {
+            listContent
+        }
+    }
+
+    private var listContent: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -523,11 +532,78 @@ struct OverlayView: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Import-View (P10)
+
+    /// Laeuft IM Panel statt in einem Sheet oder Fenster: ein eigenes
+    /// Key-Window wuerde dem Panel den Fokus nehmen und es schliessen lassen.
+    private var importView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Library importieren")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.text)
+
+            ZStack(alignment: .topLeading) {
+                if model.importText.isEmpty {
+                    Text(OverlayViewModel.importPlaceholder)
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundStyle(Theme.secondary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 10)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $model.importText)
+                    .textEditorStyle(.plain)
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(Theme.text)
+                    .scrollContentBackground(.hidden)
+                    .focused($focus, equals: .importField)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 6)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(fieldBackground(Theme.commandField, border: Theme.border))
+
+            if let error = model.importError {
+                Text(error)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.red)
+            }
+
+            HStack(spacing: 10) {
+                Spacer()
+                Button("Abbrechen") { model.cancelImport() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.fieldRadius)
+                            .strokeBorder(Theme.border, lineWidth: 1)
+                    )
+                Button("Importieren") { model.commitImport() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.fieldRadius).fill(Theme.accent)
+                    )
+            }
+        }
+        .padding(.horizontal, Theme.contentPaddingSides)
+        .padding(.top, Theme.contentPaddingTop)
+        .padding(.bottom, Theme.contentPaddingBottom)
+        .frame(height: Theme.contentHeight)
+    }
+
     // MARK: - Fussleiste
 
     private var footer: some View {
         HStack(spacing: 16) {
             addButton
+            importButton
             Spacer()
             hints
             Spacer()
@@ -553,6 +629,30 @@ struct OverlayView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .frame(minHeight: 34)
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.fieldRadius)
+                    .strokeBorder(Theme.dashedBorder, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Oeffnet dieselbe Import-View wie ⌘⇧V, nur mit leerem Feld (P10).
+    private var importButton: some View {
+        Button {
+            model.openImport(prefillFromPasteboard: false)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "square.and.arrow.down").font(.system(size: 11))
+                Text("Importieren").font(.system(size: 13))
+                Text("⌘⇧V").font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Theme.secondary)
+            }
+            .foregroundStyle(Theme.fieldText)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(minHeight: 34)
+            .contentShape(RoundedRectangle(cornerRadius: Theme.fieldRadius))
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.fieldRadius)
                     .strokeBorder(Theme.dashedBorder, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))

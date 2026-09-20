@@ -1010,4 +1010,267 @@ final class OverlayListTests: XCTestCase {
         XCTAssertEqual(store.items, sample)
     }
 
+    // MARK: - Import ueber das ViewModel (P10, revidierte Fassung)
+
+    private func setzeZwischenablage(_ text: String?) {
+        model.readFromPasteboard = { text }
+    }
+
+    /// Der ⌘⇧V-Pfad: Import-View mit Pasteboard-Inhalt oeffnen, dann
+    /// "Importieren" druecken.
+    @discardableResult
+    private func importiereAusZwischenablage() -> Bool {
+        guard model.openImport(prefillFromPasteboard: true) else { return false }
+        return model.commitImport()
+    }
+
+    func testImportFuegtEintraegeEinUndMeldetImFooter() {
+        setzeZwischenablage("""
+        [{"cat":"Git","group":"Reparatur","label":"git reflog","desc":"Verlorene Commits"}]
+        """)
+
+        XCTAssertTrue(importiereAusZwischenablage())
+        XCTAssertEqual(store.items.count, sample.count + 1)
+        XCTAssertEqual(store.items.last?.label, "git reflog")
+        XCTAssertEqual(model.statusText, "1 importiert, 0 übersprungen")
+    }
+
+    func testZweiterImportImportiertNichts() {
+        let raw = """
+        [{"cat":"Git","group":"Reparatur","label":"git reflog","desc":"Verlorene Commits"}]
+        """
+        setzeZwischenablage(raw)
+        XCTAssertTrue(importiereAusZwischenablage())
+
+        setzeZwischenablage(raw)
+        XCTAssertTrue(importiereAusZwischenablage())
+        XCTAssertEqual(store.items.count, sample.count + 1)
+        XCTAssertEqual(model.statusText, "0 importiert, 1 übersprungen")
+    }
+
+    func testImportLegtNeuenReiterHintenAn() {
+        setzeZwischenablage("""
+        [{"cat":"Docker","group":"Container","label":"docker ps","desc":"Laufende Container"}]
+        """)
+
+        XCTAssertTrue(importiereAusZwischenablage())
+        XCTAssertEqual(store.tabs.last, "Docker")
+        XCTAssertEqual(model.shortcut(for: "Docker"), 5)
+    }
+
+    func testKaputterImportLaesstLibraryUnveraendert() {
+        let vorher = store.items
+        setzeZwischenablage("kein json")
+
+        XCTAssertFalse(importiereAusZwischenablage())
+        XCTAssertEqual(store.items, vorher)
+        XCTAssertEqual(store.tabs, LibraryStore.defaultTabs)
+        XCTAssertEqual(model.importError, "Import fehlgeschlagen")
+        XCTAssertEqual(model.statusText, "3 Einträge", "Fehler steht in der View, nicht im Footer")
+    }
+
+    func testLeereZwischenablageGiltAlsFehlgeschlagen() {
+        setzeZwischenablage(nil)
+        XCTAssertFalse(importiereAusZwischenablage())
+        XCTAssertEqual(model.importError, "Import fehlgeschlagen")
+    }
+
+    func testKeinImportMitFokusImZeilenfeldOderBeimUmbenennen() {
+        setzeZwischenablage("""
+        [{"cat":"Git","group":"Reparatur","label":"git reflog","desc":"x"}]
+        """)
+
+        model.focusedField = .command(sample[0].id)
+        XCTAssertFalse(importiereAusZwischenablage())
+        XCTAssertFalse(model.isImporting)
+
+        model.focusedField = .search
+        XCTAssertTrue(model.beginRename(.group("Status")))
+        XCTAssertFalse(importiereAusZwischenablage())
+        XCTAssertFalse(model.isImporting)
+
+        XCTAssertEqual(store.items, sample)
+    }
+
+    func testImportVerwirftKopierUndLoeschhinweis() {
+        XCTAssertTrue(model.deleteSelection())
+        XCTAssertTrue(model.canUndo)
+
+        setzeZwischenablage("[]")
+        XCTAssertTrue(importiereAusZwischenablage())
+        XCTAssertFalse(model.canUndo)
+        XCTAssertEqual(model.statusText, "0 importiert, 0 übersprungen")
+    }
+
+    func testAndereAktionVerwirftDenImporthinweis() {
+        setzeZwischenablage("[]")
+        XCTAssertTrue(importiereAusZwischenablage())
+
+        model.moveSelection(by: 1)
+        XCTAssertEqual(model.statusText, "3 Einträge")
+    }
+
+    func testImportInLeeremZustandSetztAktivenReiter() {
+        for tab in LibraryStore.defaultTabs { model.deleteTab(tab) }
+        XCTAssertEqual(model.activeTab, "")
+
+        setzeZwischenablage("""
+        [{"cat":"Docker","group":"Container","label":"docker ps","desc":"x"}]
+        """)
+        XCTAssertTrue(importiereAusZwischenablage())
+        XCTAssertEqual(model.activeTab, "Docker")
+        XCTAssertEqual(model.rows.map(\.label), ["docker ps"])
+    }
+
+    func testImportWirdPersistiert() throws {
+        let fileURL = tempDirectory.appendingPathComponent("import.json")
+        try JSONEncoder().encode(sample).write(to: fileURL)
+        let persistent = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try persistent.load()
+        let persistentModel = OverlayViewModel(store: persistent)
+        persistentModel.readFromPasteboard = {
+            """
+            [{"cat":"Docker","group":"Container","label":"docker ps","desc":"x"}]
+            """
+        }
+
+        XCTAssertTrue(persistentModel.openImport(prefillFromPasteboard: true))
+        XCTAssertTrue(persistentModel.commitImport())
+
+        let reloaded = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try reloaded.load()
+        XCTAssertEqual(reloaded.items.last?.label, "docker ps")
+        XCTAssertEqual(reloaded.tabs.last, "Docker")
+    }
+
+    // MARK: - Import-View oeffnen und schliessen (P10)
+
+    func testButtonPfadOeffnetLeeresFeldUndFokussiertEs() {
+        setzeZwischenablage("[{\"cat\":\"Git\",\"group\":\"A\",\"label\":\"x\",\"desc\":\"y\"}]")
+
+        XCTAssertTrue(model.openImport(prefillFromPasteboard: false))
+        XCTAssertTrue(model.isImporting)
+        XCTAssertEqual(model.importText, "", "Button-Pfad übernimmt die Zwischenablage nicht")
+        XCTAssertEqual(model.requestedFocus, .importField)
+    }
+
+    func testCmdShiftVPfadBefuelltDasFeldVor() {
+        let raw = """
+        [{"cat":"Git","group":"Reparatur","label":"git reflog","desc":"x"}]
+        """
+        setzeZwischenablage(raw)
+
+        XCTAssertTrue(model.openImport(prefillFromPasteboard: true))
+        XCTAssertEqual(model.importText, raw)
+        XCTAssertEqual(model.requestedFocus, .importField)
+    }
+
+    func testLeereZwischenablageOeffnetDieViewMitLeeremFeld() {
+        setzeZwischenablage(nil)
+        XCTAssertTrue(model.openImport(prefillFromPasteboard: true))
+        XCTAssertTrue(model.isImporting)
+        XCTAssertEqual(model.importText, "")
+    }
+
+    func testFehlerpfadLaesstDieViewOffenUndDenTextStehen() {
+        XCTAssertTrue(model.openImport(prefillFromPasteboard: false))
+        model.importText = "kein json"
+
+        XCTAssertFalse(model.commitImport())
+        XCTAssertTrue(model.isImporting, "View bleibt offen")
+        XCTAssertEqual(model.importText, "kein json", "Eingabe bleibt erhalten")
+        XCTAssertEqual(model.importError, "Import fehlgeschlagen")
+        XCTAssertEqual(store.items, sample)
+
+        model.importText = """
+        [{"cat":"Git","group":"Reparatur","label":"git reflog","desc":"x"}]
+        """
+        XCTAssertTrue(model.commitImport(), "zweiter Versuch mit gültigem JSON geht durch")
+        XCTAssertFalse(model.isImporting)
+        XCTAssertNil(model.importError)
+        XCTAssertEqual(model.importText, "")
+    }
+
+    func testAbbrechenSchliesstOhneAenderung() {
+        XCTAssertTrue(model.openImport(prefillFromPasteboard: false))
+        model.importText = """
+        [{"cat":"Git","group":"Reparatur","label":"git reflog","desc":"x"}]
+        """
+        model.cancelImport()
+
+        XCTAssertFalse(model.isImporting)
+        XCTAssertEqual(model.importText, "")
+        XCTAssertEqual(store.items, sample)
+        XCTAssertEqual(model.requestedFocus, .search)
+    }
+
+    func testImportBeiAktiverSucheIstErlaubt() {
+        model.query = "git"
+        XCTAssertTrue(model.isSearching)
+        XCTAssertTrue(model.openImport(prefillFromPasteboard: false))
+        model.importText = """
+        [{"cat":"Git","group":"Reparatur","label":"git reflog","desc":"x"}]
+        """
+        XCTAssertTrue(model.commitImport())
+        XCTAssertEqual(store.items.last?.label, "git reflog")
+    }
+
+    func testOffeneImportViewSperrtNavigationUndLoeschen() {
+        XCTAssertTrue(model.openImport(prefillFromPasteboard: false))
+        XCTAssertTrue(model.blocksNavigationKeys)
+        XCTAssertFalse(model.canDelete)
+        XCTAssertFalse(model.deleteSelection())
+        XCTAssertEqual(store.items, sample)
+    }
+
+    func testPanelOeffnenVerwirftEineOffeneImportView() {
+        XCTAssertTrue(model.openImport(prefillFromPasteboard: false))
+        model.importText = "kein json"
+        XCTAssertFalse(model.commitImport())
+
+        model.prepareForOpen()
+        XCTAssertFalse(model.isImporting)
+        XCTAssertEqual(model.importText, "")
+        XCTAssertNil(model.importError)
+    }
+
+    // MARK: - esc-Leiter mit Import-View (P10)
+
+    func testEscapeVerlaesstErstDasImportfeldDannDieView() {
+        XCTAssertTrue(model.openImport(prefillFromPasteboard: false))
+        model.focusedField = .importField
+        XCTAssertEqual(model.escapeAction(), .leaveImportField)
+
+        model.leaveImportField()
+        XCTAssertNil(model.focusedField)
+        XCTAssertNil(model.requestedFocus)
+        XCTAssertTrue(model.isImporting)
+
+        XCTAssertEqual(model.escapeAction(), .closeImport)
+        model.cancelImport()
+        XCTAssertFalse(model.isImporting)
+
+        XCTAssertEqual(model.escapeAction(), .closePanel, "danach die bestehende Leiter")
+    }
+
+    func testEscapeLeiterMitSucheUnterDerImportView() {
+        model.query = "git"
+        XCTAssertTrue(model.openImport(prefillFromPasteboard: false))
+        model.focusedField = .importField
+
+        XCTAssertEqual(model.escapeAction(), .leaveImportField)
+        model.leaveImportField()
+        XCTAssertEqual(model.escapeAction(), .closeImport)
+        model.cancelImport()
+        XCTAssertEqual(model.escapeAction(), .clearSearch)
+    }
+
+    func testUmbenennungSchlaegtDieImportViewInDerEscLeiter() {
+        XCTAssertTrue(model.openImport(prefillFromPasteboard: false))
+        model.focusedField = .importField
+        model.cancelImport()
+
+        XCTAssertTrue(model.beginRename(.group("Status")))
+        XCTAssertEqual(model.escapeAction(), .cancelRename)
+    }
 }

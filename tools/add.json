@@ -1,0 +1,4 @@
+[
+  {"cat": "Git", "group": "Inspektion", "label": "git log --oneline --graph --all", "desc": "Commit-Baum kompakt"},
+  {"cat": "Git", "group": "Reparatur", "label": "git reflog", "desc": "Verlorene Commits finden"}
+]

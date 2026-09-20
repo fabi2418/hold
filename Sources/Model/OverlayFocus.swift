@@ -8,13 +8,15 @@ enum OverlayFocus: Hashable {
     case command(UUID)
     /// Das Eingabefeld einer laufenden Umbenennung (K3).
     case rename
+    /// Das mehrzeilige Textfeld der Import-View (P10).
+    case importField
 
     /// True fuer alles ausser dem Suchfeld. Waehrend diese Felder den Fokus
     /// haben, greifen ↑↓, ⌘1-4 und ←→ nicht (SCR-03).
     var isRowField: Bool {
         switch self {
         case .search: return false
-        case .description, .command, .rename: return true
+        case .description, .command, .rename, .importField: return true
         }
     }
 }
@@ -29,6 +31,10 @@ enum RenameTarget: Hashable {
 /// Entscheidung ohne laufendes Panel testbar ist.
 enum EscapeAction: Equatable {
     case cancelRename
+    /// P10: Fokus aus dem Import-Textfeld, die Import-View bleibt offen.
+    case leaveImportField
+    /// P10: Import-View schliessen.
+    case closeImport
     case leaveField
     case clearSearch
     case closePanel

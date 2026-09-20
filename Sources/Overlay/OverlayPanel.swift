@@ -24,6 +24,7 @@ final class OverlayPanel: NSPanel {
         static let up: UInt16 = 126
         static let c: UInt16 = 8
         static let z: UInt16 = 6
+        static let v: UInt16 = 9
         static let backspace: UInt16 = 51
     }
 
@@ -125,6 +126,14 @@ final class OverlayPanel: NSPanel {
         let hasCommand = event.modifierFlags.contains(.command)
         let hasControl = event.modifierFlags.contains(.control)
 
+        // P10: ⌘⇧V oeffnet die Import-View mit dem Pasteboard-Inhalt im Feld,
+        // es merged nicht mehr direkt.
+        if hasCommand, event.modifierFlags.contains(.shift),
+           event.charactersIgnoringModifiers?.lowercased() == "v" || event.keyCode == Key.v {
+            guard !model.blocksNavigationKeys else { return false }
+            return model.openImport(prefillFromPasteboard: true)
+        }
+
         if hasCommand, event.charactersIgnoringModifiers?.lowercased() == "z" || event.keyCode == Key.z {
             return model.undoDelete()
         }
@@ -146,9 +155,11 @@ final class OverlayPanel: NSPanel {
         switch event.keyCode {
         case Key.escape:
             let action = model.escapeAction()
-            log.info("esc: editingRow=\(self.model.isEditingRow) renaming=\(self.model.isRenaming) searching=\(self.model.isSearching) → \(String(describing: action), privacy: .public)")
+            log.info("esc: editingRow=\(self.model.isEditingRow) renaming=\(self.model.isRenaming) importing=\(self.model.isImporting) searching=\(self.model.isSearching) → \(String(describing: action), privacy: .public)")
             switch action {
             case .cancelRename: model.cancelRename()
+            case .leaveImportField: model.leaveImportField()
+            case .closeImport: model.cancelImport()
             case .leaveField: model.leaveField()
             case .clearSearch: model.clearSearch()
             case .closePanel: onRequestClose()

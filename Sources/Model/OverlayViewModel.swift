@@ -34,6 +34,18 @@ final class OverlayViewModel: ObservableObject {
 
     /// Injizierbar, damit Tests nicht in die echte Zwischenablage schreiben.
     var writeToPasteboard: (String) -> Bool = OverlayViewModel.writeToSystemPasteboard
+    var readFromPasteboard: () -> String? = OverlayViewModel.readSystemPasteboard
+
+    /// Ergebnis des letzten Imports fuer die Fussleiste (P10).
+    @Published private(set) var importFeedback: String?
+
+    /// Ist die Import-View im Panel offen (P10)? Sie ersetzt die Liste, ein
+    /// eigenes Fenster oder Sheet wuerde dem Panel den Key-Status nehmen.
+    @Published private(set) var isImporting: Bool = false
+    /// Text im Import-Feld. Die View bindet direkt hierauf.
+    @Published var importText: String = ""
+    /// Fehler des letzten Importversuchs. Steht IN der View, nicht im Footer.
+    @Published private(set) var importError: String?
 
     /// Verschachtelte ObservableObjects leiten nicht von selbst weiter: ohne
     /// das erfaehrt die View nichts von Aenderungen an store.items.
@@ -66,7 +78,9 @@ final class OverlayViewModel: ObservableObject {
     var isEditingRow: Bool { focusedField?.isRowField ?? false }
     var isRenaming: Bool { renaming != nil }
     /// Solange irgendein Textfeld ausser der Suche aktiv ist, ruhen ↑↓, ⌘1-4, ←→.
-    var blocksNavigationKeys: Bool { isEditingRow || isRenaming }
+    /// Die offene Import-View zaehlt mit: sie ersetzt die Liste, auf die sich
+    /// Auswahl und Reiterwechsel beziehen wuerden.
+    var blocksNavigationKeys: Bool { isEditingRow || isRenaming || isImporting }
 
     var sections: [OverlaySection] {
         OverlayList.sections(store: store, tab: activeTab, query: query)
@@ -92,6 +106,7 @@ final class OverlayViewModel: ObservableObject {
     /// Zeilenzahl, bis die naechste Aktion kommt.
     var statusText: String {
         if hasCopyFeedback { return "Kopiert" }
+        if let importFeedback { return importFeedback }
         if canUndo { return "Gelöscht · ⌘Z" }
         return "\(rows.count) Einträge"
     }
@@ -141,10 +156,14 @@ final class OverlayViewModel: ObservableObject {
         focusRequest += 1
     }
 
-    /// esc-Leiter nach M6: Zeilenfeld verlassen, sonst Suche leeren,
-    /// sonst Panel schliessen.
+    /// esc-Leiter nach M6, seit P10 um die Import-View erweitert:
+    /// Umbenennung abbrechen → Import-Textfeld verlassen → Import-View
+    /// schliessen → Zeilenfeld verlassen → Suche leeren → Panel schliessen.
     func escapeAction() -> EscapeAction {
         if isRenaming { return .cancelRename }
+        if isImporting {
+            return focusedField == .importField ? .leaveImportField : .closeImport
+        }
         if isEditingRow { return .leaveField }
         if isSearching { return .clearSearch }
         return .closePanel
@@ -158,8 +177,12 @@ final class OverlayViewModel: ObservableObject {
     }
 
     /// Beim Oeffnen: Auswahl auf Zeile 1, Suche leer, Fokus ins Suchfeld.
+    /// Eine noch offene Import-View wird verworfen (P10).
     func prepareForOpen() {
         clearCopyFeedback()
+        isImporting = false
+        importText = ""
+        importError = nil
         query = ""
         selection = 0
         requestFocus(.search)
@@ -432,6 +455,78 @@ final class OverlayViewModel: ObservableObject {
     func clearCopyFeedback() {
         copiedItemID = nil
         undoState = nil
+        importFeedback = nil
+    }
+
+    // MARK: - Import-View (P10)
+
+    /// Beispiel im Platzhalter des Textfelds — das Format muss man nicht raten.
+    static let importPlaceholder = """
+    [
+      {"cat": "Git", "group": "Status", "label": "git status -sb", "desc": "Kurzstatus"}
+    ]
+    """
+
+    /// Oeffnet die Import-View im Panel. `prefillFromPasteboard` ist der
+    /// ⌘⇧V-Pfad: derselbe Dialog, nur mit vorbefuelltem Feld.
+    @discardableResult
+    func openImport(prefillFromPasteboard: Bool) -> Bool {
+        guard !blocksNavigationKeys else { return false }
+        clearCopyFeedback()
+        importText = prefillFromPasteboard ? (readFromPasteboard() ?? "") : ""
+        importError = nil
+        isImporting = true
+        requestFocus(.importField)
+        log.info("Import-View geöffnet, vorbefüllt: \(prefillFromPasteboard, privacy: .public)")
+        return true
+    }
+
+    /// esc im Textfeld: nur der Fokus geht raus, die View bleibt offen.
+    func leaveImportField() {
+        focusedField = nil
+        requestFocus(nil)
+    }
+
+    /// "Abbrechen" und esc auf der zweiten Stufe. Library unveraendert.
+    func cancelImport() {
+        guard isImporting else { return }
+        isImporting = false
+        importText = ""
+        importError = nil
+        focusedField = .search
+        requestFocus(.search)
+    }
+
+    /// "Importieren": merged den Text und speichert. Bei ungueltigem JSON
+    /// bleibt die View offen, der Eingabetext stehen und die Library gleich.
+    @discardableResult
+    func commitImport() -> Bool {
+        guard isImporting else { return false }
+
+        do {
+            let incoming = try LibraryImport.decode(importText)
+            let merged = LibraryImport.merge(incoming, into: store.items, tabs: store.tabs)
+            store.restore(LibraryStore.Snapshot(tabs: merged.tabs, items: merged.items))
+            isImporting = false
+            importText = ""
+            importError = nil
+            if activeTab.isEmpty { activeTab = store.tabs.first ?? "" }
+            selection = LibraryStore.clamp(selection, count: rows.count)
+            importFeedback = merged.result.message
+            focusedField = .search
+            requestFocus(.search)
+            save()
+            log.info("Import: \(merged.result.message, privacy: .public)")
+            return true
+        } catch {
+            importError = LibraryImport.Failure.invalidJSON.errorDescription
+            log.error("Import fehlgeschlagen: Eingabe enthält kein gültiges JSON-Array")
+            return false
+        }
+    }
+
+    static func readSystemPasteboard() -> String? {
+        NSPasteboard.general.string(forType: .string)
     }
 
     static func writeToSystemPasteboard(_ text: String) -> Bool {
