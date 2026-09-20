@@ -1,4 +1,4 @@
-# Projektanweisung: Cheatsheet Overlay (macOS, Swift/SwiftUI)
+# Projektanweisung: Hold Overlay (macOS, Swift/SwiftUI)
 
 > In das Feld „Projektanweisungen" des Claude-Projekts einfügen. Die übrigen MD-Dateien in die Projekt-Wissensbasis hochladen.
 

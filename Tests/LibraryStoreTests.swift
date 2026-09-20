@@ -5,7 +5,7 @@ final class LibraryStoreTests: XCTestCase {
 
     override func setUpWithError() throws {
         tempDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("CheatsheetTests-\(UUID().uuidString)")
+            .appendingPathComponent("HoldTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
     }
 

@@ -3,7 +3,7 @@
 ## Prototyp (Verhalten und Optik maßgeblich)
 - Claude Artifact (zwei Artboards: Reiter Git, Reiter Claude): https://claude.ai/artifact/JatsEaAAE3YxbgnGsDhktP
 
-## Miro-Board „Cheatsheet Overlay – Board-Spezifikation"
+## Miro-Board „Hold Overlay – Board-Spezifikation"
 - Board: https://miro.com/app/board/uXjVHky-9dQ=/
 - Projektphasen 001–007: https://miro.com/app/board/uXjVHky-9dQ=/?moveToWidget=3458764684353235030
 - SCR-Karten (Screens & States): https://miro.com/app/board/uXjVHky-9dQ=/?moveToWidget=3458764684351711841

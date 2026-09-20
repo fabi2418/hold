@@ -48,7 +48,7 @@ Ziel: `~/.claude/CLAUDE.md`. Projektspezifisches gehört in `./CLAUDE.md` oder `
 - Keine Alternativen nach getroffener Entscheidung – außer echtes Risiko, dann 1 Satz.
 - Kein Englisch als Antwortsprache, wenn ich auf Deutsch schreibe.
 
-## Build (Cheatsheet-Projekt)
+## Build (Hold-Projekt)
 - Projekt erzeugen: `xcodegen generate`
-- Debug-Build: `xcodebuild -project Cheatsheet.xcodeproj -scheme Cheatsheet -configuration Debug -derivedDataPath build build`
-- App-Pfad: `build/Build/Products/Debug/Cheatsheet.app` (Start: `open build/Build/Products/Debug/Cheatsheet.app`)
+- Debug-Build: `xcodebuild -project Hold.xcodeproj -scheme Hold -configuration Debug -derivedDataPath build build`
+- App-Pfad: `build/Build/Products/Debug/Hold.app` (Start: `open build/Build/Products/Debug/Hold.app`)

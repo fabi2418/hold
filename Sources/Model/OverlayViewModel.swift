@@ -3,7 +3,7 @@ import Combine
 import Foundation
 import os
 
-private let log = Logger(subsystem: "com.fabi2418.cheatsheet", category: "overlay")
+private let log = Logger(subsystem: "com.fabi2418.hold", category: "overlay")
 
 /// Zustand des Overlays: aktiver Reiter, Suchtext, Auswahl, Kopier-Feedback,
 /// Fokus. Die Rechenarbeit liegt in OverlayList, hier steht die Zustandsfuehrung.

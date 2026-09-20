@@ -1,7 +1,7 @@
 import AppKit
 import os
 
-private let log = Logger(subsystem: "com.fabi2418.cheatsheet", category: "hotkey")
+private let log = Logger(subsystem: "com.fabi2418.hold", category: "hotkey")
 
 private func tapCallback(
     proxy: CGEventTapProxy,

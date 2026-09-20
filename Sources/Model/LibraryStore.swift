@@ -53,10 +53,10 @@ final class LibraryStore: ObservableObject {
         self.seedURL = seedURL
     }
 
-    /// ~/Library/Application Support/Cheatsheet/library.json
+    /// ~/Library/Application Support/Hold/library.json
     static var defaultFileURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("Cheatsheet", isDirectory: true)
+        return base.appendingPathComponent("Hold", isDirectory: true)
             .appendingPathComponent("library.json")
     }
 

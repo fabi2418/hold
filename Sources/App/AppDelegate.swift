@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import os
 
-private let log = Logger(subsystem: "com.fabi2418.cheatsheet", category: "app")
+private let log = Logger(subsystem: "com.fabi2418.hold", category: "app")
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -26,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         let button = statusItem.button
-        button?.image = NSImage(systemSymbolName: "command", accessibilityDescription: "Cheatsheet")
+        button?.image = NSImage(systemSymbolName: "command", accessibilityDescription: "Hold")
         if button?.image == nil { button?.title = "⌘" }
         log.info("StatusItem erzeugt: isVisible=\(self.statusItem.isVisible) button!=nil=\(button != nil) image!=nil=\(button?.image != nil)")
 

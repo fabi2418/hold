@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import os
 
-private let log = Logger(subsystem: "com.fabi2418.cheatsheet", category: "panel")
+private let log = Logger(subsystem: "com.fabi2418.hold", category: "panel")
 
 final class OverlayPanel: NSPanel {
     /// Wird von esc gerufen; der AppDelegate leitet auf CmdHoldMonitor.close(),
@@ -42,6 +42,7 @@ final class OverlayPanel: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        title = "Hold"
 
         let hosting = NSHostingView(rootView: OverlayView(model: model))
         hosting.autoresizingMask = [.width, .height]

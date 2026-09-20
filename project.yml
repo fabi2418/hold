@@ -1,4 +1,4 @@
-name: Cheatsheet
+name: Hold
 options:
   bundleIdPrefix: com.fabi2418
   deploymentTarget:
@@ -6,10 +6,10 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
 targets:
-  Cheatsheet:
+  Hold:
     type: application
     platform: macOS
     sources:
@@ -17,14 +17,14 @@ targets:
       - Resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.fabi2418.cheatsheet
+        PRODUCT_BUNDLE_IDENTIFIER: com.fabi2418.hold
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_LSUIElement: YES
         ENABLE_APP_SANDBOX: NO
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: 9ZV3YZX4YG
-  CheatsheetTests:
+  HoldTests:
     type: bundle.unit-test
     platform: macOS
     sources:
@@ -33,16 +33,16 @@ targets:
       - Resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.fabi2418.cheatsheet.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.fabi2418.hold.tests
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 9ZV3YZX4YG
 schemes:
-  Cheatsheet:
+  Hold:
     build:
       targets:
-        Cheatsheet: all
-        CheatsheetTests: [test]
+        Hold: all
+        HoldTests: [test]
     test:
       targets:
-        - CheatsheetTests
+        - HoldTests

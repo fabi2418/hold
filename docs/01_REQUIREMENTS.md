@@ -1,4 +1,4 @@
-# 01 · Requirements — Cheatsheet Overlay v1.0
+# 01 · Requirements — Hold Overlay v1.0
 
 Abgeleitet aus dem Artifact-Prototyp und den SCR-Karten auf dem Miro-Board. Quelle bei Detailfragen: Prototyp https://claude.ai/artifact/JatsEaAAE3YxbgnGsDhktP · Miro https://miro.com/app/board/uXjVHky-9dQ=/
 
@@ -29,7 +29,7 @@ Aus jedem Reiter lässt sich ein Eintrag in unter 2 Sekunden kopieren (⌘ halte
 - M7 Suche global über label/desc/cat mit Reiter-Badge je Treffer; leeren führt zurück; 0 Treffer zeigt SCR-02E.
 - M8 Kopieren schreibt `label` via NSPasteboard; Feedback wie SCR-04; Fehler dürfen nie crashen.
 - M9 Inline-Editieren beider Felder; „Eintrag hinzufügen" gemäß SCR-05, direkt fokussiert.
-- M10 Persistenz als JSON unter `~/Library/Application Support/Cheatsheet/library.json`; Erststart mit Seed-Library (Inhalte aus dem Prototyp); Schreiben atomar; Änderungen speichern spätestens beim Schließen des Overlays.
+- M10 Persistenz als JSON unter `~/Library/Application Support/Hold/library.json`; Erststart mit Seed-Library (Inhalte aus dem Prototyp); Schreiben atomar; Änderungen speichern spätestens beim Schließen des Overlays.
 - M11 Optik nah am Prototyp: helles macOS-Panel, Systemfont + Monospace für Commands, Akzentfarbe für aktiven Reiter/Auswahl/Feedback.
 
 ## KANN (v1.0, nur wenn Zeit)
