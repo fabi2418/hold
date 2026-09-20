@@ -130,8 +130,8 @@ final class OverlayPanel: NSPanel {
         }
 
         if hasCommand, let digit = event.charactersIgnoringModifiers.flatMap(Int.init),
-           (1 ... LibraryStore.tabs.count).contains(digit) {
-            guard !model.isSearching, !model.isEditingRow else { return false }
+           (1 ... max(model.tabs.count, 1)).contains(digit) {
+            guard !model.isSearching, !model.blocksNavigationKeys else { return false }
             model.selectTab(number: digit)
             return true
         }
@@ -139,23 +139,24 @@ final class OverlayPanel: NSPanel {
         switch event.keyCode {
         case Key.escape:
             let action = model.escapeAction()
-            log.info("esc: editingRow=\(self.model.isEditingRow) searching=\(self.model.isSearching) → \(String(describing: action), privacy: .public)")
+            log.info("esc: editingRow=\(self.model.isEditingRow) renaming=\(self.model.isRenaming) searching=\(self.model.isSearching) → \(String(describing: action), privacy: .public)")
             switch action {
+            case .cancelRename: model.cancelRename()
             case .leaveField: model.leaveField()
             case .clearSearch: model.clearSearch()
             case .closePanel: onRequestClose()
             }
             return true
         case Key.up:
-            guard !model.isEditingRow else { return false }
+            guard !model.blocksNavigationKeys else { return false }
             model.moveSelection(by: -1)
             return true
         case Key.down:
-            guard !model.isEditingRow else { return false }
+            guard !model.blocksNavigationKeys else { return false }
             model.moveSelection(by: 1)
             return true
         case Key.left, Key.right:
-            guard !model.isSearching, !model.isEditingRow else { return false }
+            guard !model.isSearching, !model.blocksNavigationKeys else { return false }
             model.cycleTab(by: event.keyCode == Key.left ? -1 : 1)
             return true
         default:

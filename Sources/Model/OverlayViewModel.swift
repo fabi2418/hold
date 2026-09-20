@@ -15,7 +15,7 @@ final class OverlayViewModel: ObservableObject {
             copiedItemID = nil
         }
     }
-    @Published private(set) var activeTab: String = LibraryStore.tabs[0]
+    @Published private(set) var activeTab: String
     @Published private(set) var selection: Int = 0
     /// Zuletzt kopierter Eintrag; treibt das Feedback nach SCR-04.
     /// Wird durch die naechste Aktion geloescht, nicht durch einen Timer.
@@ -39,12 +39,19 @@ final class OverlayViewModel: ObservableObject {
     /// das erfaehrt die View nichts von Aenderungen an store.items.
     private var storeObserver: AnyCancellable?
 
+    /// Laeuft eine Umbenennung, und mit welchem Entwurfstext (K3).
+    @Published private(set) var renaming: RenameTarget?
+    @Published var renameDraft: String = ""
+
     init(store: LibraryStore) {
         self.store = store
+        self.activeTab = store.tabs.first ?? ""
         storeObserver = store.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }
     }
+
+    var tabs: [String] { store.tabs }
 
     /// Liest den aktuellen Stand aus dem Store. Ein Binding darf nicht auf
     /// einem eingefangenen Schnappschuss arbeiten, der sich nie aktualisiert.
@@ -54,6 +61,9 @@ final class OverlayViewModel: ObservableObject {
 
     var isSearching: Bool { OverlayList.isSearching(query) }
     var isEditingRow: Bool { focusedField?.isRowField ?? false }
+    var isRenaming: Bool { renaming != nil }
+    /// Solange irgendein Textfeld ausser der Suche aktiv ist, ruhen ↑↓, ⌘1-4, ←→.
+    var blocksNavigationKeys: Bool { isEditingRow || isRenaming }
 
     var sections: [OverlaySection] {
         OverlayList.sections(store: store, tab: activeTab, query: query)
@@ -82,7 +92,7 @@ final class OverlayViewModel: ObservableObject {
 
     /// Reiterwechsel setzt Auswahl auf Zeile 1 und leert die Suche (SCR-01b).
     func selectTab(_ tab: String) {
-        guard LibraryStore.tabs.contains(tab) else { return }
+        guard store.tabs.contains(tab) else { return }
         clearCopyFeedback()
         query = ""
         activeTab = tab
@@ -90,13 +100,13 @@ final class OverlayViewModel: ObservableObject {
     }
 
     func cycleTab(by delta: Int) {
-        selectTab(OverlayList.cycleTab(from: activeTab, by: delta))
+        selectTab(OverlayList.cycleTab(from: activeTab, by: delta, tabs: store.tabs))
     }
 
     func selectTab(number: Int) {
         let index = number - 1
-        guard LibraryStore.tabs.indices.contains(index) else { return }
-        selectTab(LibraryStore.tabs[index])
+        guard store.tabs.indices.contains(index) else { return }
+        selectTab(store.tabs[index])
     }
 
     func moveSelection(by delta: Int) {
@@ -126,6 +136,7 @@ final class OverlayViewModel: ObservableObject {
     /// esc-Leiter nach M6: Zeilenfeld verlassen, sonst Suche leeren,
     /// sonst Panel schliessen.
     func escapeAction() -> EscapeAction {
+        if isRenaming { return .cancelRename }
         if isEditingRow { return .leaveField }
         if isSearching { return .clearSearch }
         return .closePanel
@@ -144,6 +155,59 @@ final class OverlayViewModel: ObservableObject {
         query = ""
         selection = 0
         requestFocus(.search)
+    }
+
+    // MARK: - Umbenennen (K3)
+
+    /// Startet die Umbenennung. Bei aktiver Suche und bei einem Reiter ohne
+    /// Eintraege passiert nichts.
+    @discardableResult
+    func beginRename(_ target: RenameTarget) -> Bool {
+        guard !isSearching else { return false }
+        switch target {
+        case .tab(let name):
+            guard store.tabs.contains(name), !store.items(in: name).isEmpty else { return false }
+            renameDraft = name
+        case .group(let name):
+            guard store.groups(in: activeTab).contains(where: { $0.name == name }) else { return false }
+            renameDraft = name
+        }
+        renaming = target
+        requestFocus(.rename)
+        return true
+    }
+
+    /// esc: Entwurf verwerfen, alter Name bleibt stehen.
+    func cancelRename() {
+        guard isRenaming else { return }
+        renaming = nil
+        renameDraft = ""
+        focusedField = .search
+        requestFocus(.search)
+    }
+
+    /// Enter oder Blur. Abgelehnte Namen lassen den alten Namen stehen.
+    @discardableResult
+    func commitRename() -> Bool {
+        guard let target = renaming else { return false }
+        let name = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        var accepted = false
+
+        switch target {
+        case .tab(let old):
+            accepted = store.renameTab(from: old, to: name)
+            if accepted, activeTab == old { activeTab = name }
+        case .group(let old):
+            accepted = store.renameGroup(in: activeTab, from: old, to: name)
+        }
+
+        renaming = nil
+        renameDraft = ""
+        focusedField = .search
+        requestFocus(.search)
+        if accepted { save() }
+        log.info("Umbenennen \(accepted ? "übernommen" : "abgelehnt", privacy: .public)")
+        return accepted
     }
 
     // MARK: - Editieren (M9)

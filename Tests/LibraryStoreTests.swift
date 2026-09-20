@@ -39,7 +39,7 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertTrue(seeded)
         XCTAssertTrue(FileManager.default.fileExists(atPath: store.fileURL.path))
         XCTAssertEqual(store.items.count, 28)
-        XCTAssertEqual(Set(store.items.map(\.cat)), Set(LibraryStore.tabs))
+        XCTAssertEqual(Set(store.items.map(\.cat)), Set(store.tabs))
     }
 
     func testZweiterStartLiestDateiUndSeedetNichtErneut() throws {
@@ -163,7 +163,7 @@ final class LibraryStoreTests: XCTestCase {
     }
 
     func testReiterReihenfolgeIstFest() {
-        XCTAssertEqual(LibraryStore.tabs, ["Git", "Claude", "Python", "zsh"])
+        XCTAssertEqual(LibraryStore.defaultTabs, ["Git", "Claude", "Python", "zsh"])
     }
 
     // MARK: - Index-Klemmung
@@ -257,8 +257,8 @@ final class LibraryStoreTests: XCTestCase {
     func testSeedZaehlerProReiter() throws {
         let store = makeStore()
         try store.load()
-        XCTAssertEqual(LibraryStore.tabs.map { store.items(in: $0).count }, [10, 10, 5, 3])
-        XCTAssertEqual(LibraryStore.tabs.reduce(0) { $0 + store.items(in: $1).count }, store.items.count)
+        XCTAssertEqual(store.tabs.map { store.items(in: $0).count }, [10, 10, 5, 3])
+        XCTAssertEqual(store.tabs.reduce(0) { $0 + store.items(in: $1).count }, store.items.count)
     }
 
     func testUnbekannterReiterIstLeer() throws {

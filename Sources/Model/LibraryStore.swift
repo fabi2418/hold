@@ -17,13 +17,22 @@ enum LibraryError: LocalizedError, Equatable {
     }
 }
 
+/// Dateiformat ab K3: die Reiter-Reihenfolge muss mitgespeichert werden.
+/// Aeltere Dateien sind ein blankes Array von Eintraegen und werden weiter
+/// gelesen (siehe load()).
+private struct LibraryFile: Codable {
+    var tabs: [String]
+    var items: [LibraryItem]
+}
+
 /// Laedt, haelt und speichert die Library (M10).
 final class LibraryStore: ObservableObject {
-    /// Feste Reiter-Reihenfolge nach M4. Bewusst im Code und nicht aus der
-    /// JSON-Datei abgeleitet, damit ein manueller Edit sie nicht umsortiert.
-    static let tabs = ["Git", "Claude", "Python", "zsh"]
+    /// Ausgangsreihenfolge nach M4. Ab K3 nur noch der Startwert: die
+    /// tatsaechliche Reihenfolge lebt in `tabs` und wird persistiert.
+    static let defaultTabs = ["Git", "Claude", "Python", "zsh"]
 
     @Published var items: [LibraryItem] = []
+    @Published private(set) var tabs: [String] = LibraryStore.defaultTabs
 
     /// Nur ein erfolgreicher load() setzt das Flag. Solange es false ist,
     /// verweigert save() den Write und schuetzt die Datei auf der Platte.
@@ -59,7 +68,15 @@ final class LibraryStore: ObservableObject {
         }
         do {
             let data = try Data(contentsOf: fileURL)
-            items = try JSONDecoder().decode([LibraryItem].self, from: data)
+            let decoder = JSONDecoder()
+            if let file = try? decoder.decode(LibraryFile.self, from: data) {
+                items = file.items
+                tabs = file.tabs
+            } else {
+                // Altes Format: blankes Array, Reiter auf den Standard.
+                items = try decoder.decode([LibraryItem].self, from: data)
+                tabs = LibraryStore.defaultTabs
+            }
         } catch {
             isLoaded = false
             throw error
@@ -72,7 +89,7 @@ final class LibraryStore: ObservableObject {
         guard isLoaded else { throw LibraryError.saveBlockedAfterFailedLoad }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try write(try encoder.encode(items))
+        try write(try encoder.encode(LibraryFile(tabs: tabs, items: items)))
     }
 
     private func writeSeed() throws {
@@ -122,5 +139,43 @@ final class LibraryStore: ObservableObject {
     static func clamp(_ index: Int, count: Int) -> Int {
         guard count > 0 else { return 0 }
         return min(max(index, 0), count - 1)
+    }
+
+    // MARK: - Umbenennen (K3)
+
+    /// Benennt einen Reiter um und zieht alle Eintraege mit.
+    /// Abgelehnt werden: leerer Name, bereits vergebener Name, unbekannter
+    /// Reiter und ein Reiter ohne Eintraege.
+    @discardableResult
+    func renameTab(from old: String, to new: String) -> Bool {
+        let name = new.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return false }
+        guard let index = tabs.firstIndex(of: old) else { return false }
+        if name == old { return true }
+        guard !tabs.contains(name) else { return false }
+        guard !items(in: old).isEmpty else { return false }
+
+        tabs[index] = name
+        for position in items.indices where items[position].cat == old {
+            items[position].cat = name
+        }
+        return true
+    }
+
+    /// Benennt eine Gruppe um, ausschliesslich innerhalb des angegebenen
+    /// Reiters. Gleichnamige Gruppen anderer Reiter bleiben unberuehrt.
+    @discardableResult
+    func renameGroup(in tab: String, from old: String, to new: String) -> Bool {
+        let name = new.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return false }
+        let existing = groups(in: tab).map(\.name)
+        guard existing.contains(old) else { return false }
+        if name == old { return true }
+        guard !existing.contains(name) else { return false }
+
+        for position in items.indices where items[position].cat == tab && items[position].group == old {
+            items[position].group = name
+        }
+        return true
     }
 }

@@ -27,7 +27,11 @@ struct OverlayView: View {
         )
         .onAppear { focus = .search }
         .onChange(of: model.focusRequest) { focus = model.requestedFocus }
-        .onChange(of: focus) { _, neu in model.focusedField = neu }
+        .onChange(of: focus) { _, neu in
+            model.focusedField = neu
+            // Blur eines Umbenennungsfelds uebernimmt, wie Enter.
+            if neu != .rename, model.isRenaming { model.commitRename() }
+        }
     }
 
     private var hairline: some View {
@@ -67,7 +71,7 @@ struct OverlayView: View {
 
     private var tabBar: some View {
         HStack(spacing: 4) {
-            ForEach(Array(LibraryStore.tabs.enumerated()), id: \.element) { index, tab in
+            ForEach(Array(model.tabs.enumerated()), id: \.element) { index, tab in
                 tabButton(tab, shortcut: index + 1)
             }
             Spacer()
@@ -75,7 +79,18 @@ struct OverlayView: View {
         .padding(.horizontal, 22)
     }
 
+    @ViewBuilder
     private func tabButton(_ tab: String, shortcut: Int) -> some View {
+        if model.renaming == .tab(tab) {
+            renameField(width: 90)
+                .padding(.horizontal, 16)
+                .frame(minHeight: 44)
+        } else {
+            tabLabel(tab, shortcut: shortcut)
+        }
+    }
+
+    private func tabLabel(_ tab: String, shortcut: Int) -> some View {
         let isActive = tab == model.activeTab && !model.isSearching
         return Button {
             model.selectTab(tab)
@@ -109,6 +124,29 @@ struct OverlayView: View {
             }
         }
         .buttonStyle(.plain)
+        .onTapGesture(count: 2) { model.beginRename(.tab(tab)) }
+    }
+
+    /// Eingabefeld fuer Reiter- und Gruppennamen (K3). Enter uebernimmt,
+    /// esc verwirft (ueber die esc-Leiter im Panel).
+    private func renameField(width: CGFloat) -> some View {
+        TextField("", text: $model.renameDraft)
+            .textFieldStyle(.plain)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(Theme.text)
+            .lineLimit(1)
+            .focused($focus, equals: .rename)
+            .onSubmit { model.commitRename() }
+            .padding(.horizontal, 8)
+            .frame(width: width, height: 26)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Theme.commandField)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Theme.accent, lineWidth: 1)
+                    )
+            )
     }
 
     // MARK: - Inhalt
@@ -185,12 +223,20 @@ struct OverlayView: View {
         .padding(.bottom, 6)
     }
 
+    @ViewBuilder
     private func groupTitle(_ name: String) -> some View {
-        Text(name)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(Theme.text)
-            .padding(.top, 14)
-            .padding(.bottom, 2)
+        if model.renaming == .group(name) {
+            renameField(width: 220)
+                .padding(.top, 14)
+                .padding(.bottom, 2)
+        } else {
+            Text(name)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.text)
+                .padding(.top, 14)
+                .padding(.bottom, 2)
+                .onTapGesture(count: 2) { model.beginRename(.group(name)) }
+        }
     }
 
     private func row(_ item: LibraryItem, index: Int, isSelected: Bool) -> some View {

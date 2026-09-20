@@ -61,8 +61,7 @@ enum OverlayList {
     }
 
     /// Reiterwechsel mit ←→: zyklisch in beide Richtungen (M6).
-    static func cycleTab(from tab: String, by delta: Int) -> String {
-        let tabs = LibraryStore.tabs
+    static func cycleTab(from tab: String, by delta: Int, tabs: [String]) -> String {
         guard let current = tabs.firstIndex(of: tab), !tabs.isEmpty else { return tab }
         let count = tabs.count
         let next = ((current + delta) % count + count) % count

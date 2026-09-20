@@ -95,13 +95,13 @@ final class OverlayListTests: XCTestCase {
     // MARK: - Reiter zyklisch
 
     func testCycleTabVorwaertsUndRueckwaertsZyklisch() {
-        XCTAssertEqual(OverlayList.cycleTab(from: "Git", by: -1), "zsh")
-        XCTAssertEqual(OverlayList.cycleTab(from: "zsh", by: 1), "Git")
-        XCTAssertEqual(OverlayList.cycleTab(from: "Git", by: 1), "Claude")
+        XCTAssertEqual(OverlayList.cycleTab(from: "Git", by: -1, tabs: LibraryStore.defaultTabs), "zsh")
+        XCTAssertEqual(OverlayList.cycleTab(from: "zsh", by: 1, tabs: LibraryStore.defaultTabs), "Git")
+        XCTAssertEqual(OverlayList.cycleTab(from: "Git", by: 1, tabs: LibraryStore.defaultTabs), "Claude")
     }
 
     func testCycleTabMitUnbekanntemReiterBleibtStehen() {
-        XCTAssertEqual(OverlayList.cycleTab(from: "Rust", by: 1), "Rust")
+        XCTAssertEqual(OverlayList.cycleTab(from: "Rust", by: 1, tabs: LibraryStore.defaultTabs), "Rust")
     }
 
     // MARK: - ViewModel
@@ -473,6 +473,138 @@ final class OverlayListTests: XCTestCase {
         XCTAssertEqual(model.selection, 2, "Auswahl bleibt auf der Zeile")
         XCTAssertFalse(model.isEditingRow, "Zustand gilt sofort, nicht erst nach dem Neuzeichnen")
         XCTAssertEqual(model.escapeAction(), .closePanel, "zweites esc schliesst")
+    }
+
+    // MARK: - Umbenennen (K3)
+
+    func testReiterUmbenennenZiehtAlleEintraegeMit() {
+        XCTAssertTrue(store.renameTab(from: "Git", to: "Version Control"))
+        XCTAssertEqual(store.tabs, ["Version Control", "Claude", "Python", "zsh"])
+        XCTAssertEqual(store.items(in: "Version Control").count, 3)
+        XCTAssertTrue(store.items(in: "Git").isEmpty)
+        XCTAssertEqual(store.items(in: "zsh").count, 1, "andere Reiter unberührt")
+    }
+
+    func testReiterUmbenennenLehntDuplikatAb() {
+        XCTAssertFalse(store.renameTab(from: "Git", to: "zsh"))
+        XCTAssertEqual(store.tabs, LibraryStore.defaultTabs)
+        XCTAssertEqual(store.items(in: "Git").count, 3)
+    }
+
+    func testReiterUmbenennenLehntLeerenNamenAb() {
+        XCTAssertFalse(store.renameTab(from: "Git", to: ""))
+        XCTAssertFalse(store.renameTab(from: "Git", to: "   "))
+        XCTAssertEqual(store.tabs, LibraryStore.defaultTabs)
+    }
+
+    func testLeererReiterIstNichtUmbenennbar() {
+        XCTAssertTrue(store.items(in: "Python").isEmpty)
+        XCTAssertFalse(store.renameTab(from: "Python", to: "Py"))
+        XCTAssertEqual(store.tabs, LibraryStore.defaultTabs)
+    }
+
+    func testReiterUmbenennenSchneidetLeerzeichenAb() {
+        XCTAssertTrue(store.renameTab(from: "Git", to: "  Repo  "))
+        XCTAssertEqual(store.tabs.first, "Repo")
+        XCTAssertEqual(store.items(in: "Repo").count, 3)
+    }
+
+    func testGruppeUmbenennenNurImAktivenReiter() {
+        // "Status" gibt es in Git; in zsh wird absichtlich eine gleichnamige angelegt.
+        store.items.append(LibraryItem(cat: "zsh", group: "Status", label: "uptime", desc: "Laufzeit"))
+
+        XCTAssertTrue(store.renameGroup(in: "Git", from: "Status", to: "Zustand"))
+        XCTAssertEqual(store.groups(in: "Git").map(\.name), ["Zustand", "Committen"])
+        XCTAssertEqual(store.groups(in: "zsh").map(\.name), ["Allgemein", "Status"],
+                       "gleichnamige Gruppe im anderen Reiter bleibt unberührt")
+    }
+
+    func testGruppeUmbenennenLehntDuplikatUndLeerAb() {
+        XCTAssertFalse(store.renameGroup(in: "Git", from: "Status", to: "Committen"))
+        XCTAssertFalse(store.renameGroup(in: "Git", from: "Status", to: " "))
+        XCTAssertFalse(store.renameGroup(in: "Git", from: "Gibtsnicht", to: "Neu"))
+        XCTAssertEqual(store.groups(in: "Git").map(\.name), ["Status", "Committen"])
+    }
+
+    func testGleicherNameIstEinAkzeptierterNoOp() {
+        XCTAssertTrue(store.renameTab(from: "Git", to: "Git"))
+        XCTAssertTrue(store.renameGroup(in: "Git", from: "Status", to: "Status"))
+        XCTAssertEqual(store.tabs, LibraryStore.defaultTabs)
+    }
+
+    func testReiterReihenfolgeUeberlebtSpeichernUndLaden() throws {
+        let fileURL = tempDirectory.appendingPathComponent("tabs.json")
+        try JSONEncoder().encode(sample).write(to: fileURL)
+        let persistent = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try persistent.load()
+        XCTAssertEqual(persistent.tabs, LibraryStore.defaultTabs, "altes Array-Format wird gelesen")
+
+        XCTAssertTrue(persistent.renameTab(from: "Git", to: "Repo"))
+        try persistent.save()
+
+        let reloaded = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try reloaded.load()
+        XCTAssertEqual(reloaded.tabs, ["Repo", "Claude", "Python", "zsh"])
+        XCTAssertEqual(reloaded.items(in: "Repo").count, 3)
+    }
+
+    // MARK: - Umbenennen ueber das ViewModel
+
+    func testUmbenennenBeiAktiverSucheWirdAbgelehnt() {
+        model.query = "git"
+        XCTAssertFalse(model.beginRename(.tab("Git")))
+        XCTAssertFalse(model.beginRename(.group("Status")))
+        XCTAssertFalse(model.isRenaming)
+    }
+
+    func testBeginRenameSetztEntwurfUndFokus() {
+        let vorher = model.focusRequest
+        XCTAssertTrue(model.beginRename(.tab("Git")))
+        XCTAssertEqual(model.renaming, .tab("Git"))
+        XCTAssertEqual(model.renameDraft, "Git")
+        XCTAssertEqual(model.requestedFocus, .rename)
+        XCTAssertEqual(model.focusRequest, vorher + 1)
+        XCTAssertTrue(model.blocksNavigationKeys)
+    }
+
+    func testAbbrechenLaesstAltenNamenStehen() {
+        model.beginRename(.tab("Git"))
+        model.renameDraft = "Etwas anderes"
+        model.cancelRename()
+
+        XCTAssertFalse(model.isRenaming)
+        XCTAssertEqual(store.tabs, LibraryStore.defaultTabs)
+        XCTAssertEqual(model.activeTab, "Git")
+    }
+
+    func testUebernehmenZiehtDenAktivenReiterNach() {
+        model.beginRename(.tab("Git"))
+        model.renameDraft = "Repo"
+        XCTAssertTrue(model.commitRename())
+
+        XCTAssertEqual(model.activeTab, "Repo")
+        XCTAssertEqual(model.tabs.first, "Repo")
+        XCTAssertFalse(model.isRenaming)
+        XCTAssertEqual(model.rows.count, 3, "Zeilen des Reiters bleiben sichtbar")
+    }
+
+    func testAbgelehnteUebernahmeAendertNichts() {
+        model.beginRename(.tab("Git"))
+        model.renameDraft = "zsh"
+        XCTAssertFalse(model.commitRename())
+
+        XCTAssertEqual(store.tabs, LibraryStore.defaultTabs)
+        XCTAssertEqual(model.activeTab, "Git")
+        XCTAssertFalse(model.isRenaming)
+    }
+
+    func testEscapeBrichtZuerstDieUmbenennungAb() {
+        model.query = ""
+        model.beginRename(.group("Status"))
+        XCTAssertEqual(model.escapeAction(), .cancelRename)
+
+        model.cancelRename()
+        XCTAssertEqual(model.escapeAction(), .closePanel)
     }
 
 }
