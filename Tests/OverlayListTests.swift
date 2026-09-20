@@ -321,7 +321,7 @@ final class OverlayListTests: XCTestCase {
     // MARK: - Eintrag anlegen (SCR-05)
 
     func testNeuerEintragLandetInLetzterGruppeDesAktivenReiters() {
-        let neu = model.addEntry()
+        let neu = model.addEntry()!
         XCTAssertEqual(neu.cat, "Git")
         XCTAssertEqual(neu.group, "Committen")
         XCTAssertEqual(neu.desc, "")
@@ -336,14 +336,14 @@ final class OverlayListTests: XCTestCase {
         model.selectTab("Python")
         XCTAssertTrue(model.rows.isEmpty)
 
-        let neu = model.addEntry()
+        let neu = model.addEntry()!
         XCTAssertEqual(neu.cat, "Python")
         XCTAssertEqual(neu.group, "Allgemein")
         XCTAssertEqual(model.sections.map(\.name), ["Allgemein"])
     }
 
     func testNeuerEintragIstDieLetzteZeileUndAusgewaehlt() {
-        let neu = model.addEntry()
+        let neu = model.addEntry()!
         XCTAssertEqual(model.rows.count, 4)
         XCTAssertEqual(model.selection, 3)
         XCTAssertEqual(model.selectedItem?.id, neu.id)
@@ -353,7 +353,7 @@ final class OverlayListTests: XCTestCase {
         model.query = "git"
         XCTAssertTrue(model.isSearching)
 
-        let neu = model.addEntry()
+        let neu = model.addEntry()!
         XCTAssertEqual(model.query, "")
         XCTAssertFalse(model.isSearching)
         XCTAssertEqual(neu.cat, "Git")
@@ -362,7 +362,7 @@ final class OverlayListTests: XCTestCase {
 
     func testNeuerEintragFordertFokusInDerBeschreibung() {
         let vorher = model.focusRequest
-        let neu = model.addEntry()
+        let neu = model.addEntry()!
         XCTAssertEqual(model.focusRequest, vorher + 1)
         XCTAssertEqual(model.requestedFocus, .description(neu.id))
     }
@@ -370,7 +370,7 @@ final class OverlayListTests: XCTestCase {
     func testKopierenEinerLeerenZeileIstNoOp() {
         let spy = PasteboardSpy()
         model.writeToPasteboard = spy.write
-        let neu = model.addEntry()
+        let neu = model.addEntry()!
 
         XCTAssertFalse(model.copy(neu))
         XCTAssertFalse(model.copySelection())
@@ -497,10 +497,12 @@ final class OverlayListTests: XCTestCase {
         XCTAssertEqual(store.tabs, LibraryStore.defaultTabs)
     }
 
-    func testLeererReiterIstNichtUmbenennbar() {
+    /// Mit P8 werden leere Reiter absichtlich angelegt, also muessen sie auch
+    /// umbenennbar sein. Die K3-Einschraenkung ist dort entfallen.
+    func testLeererReiterIstUmbenennbar() {
         XCTAssertTrue(store.items(in: "Python").isEmpty)
-        XCTAssertFalse(store.renameTab(from: "Python", to: "Py"))
-        XCTAssertEqual(store.tabs, LibraryStore.defaultTabs)
+        XCTAssertTrue(store.renameTab(from: "Python", to: "Py"))
+        XCTAssertEqual(store.tabs, ["Git", "Claude", "Py", "zsh"])
     }
 
     func testReiterUmbenennenSchneidetLeerzeichenAb() {
@@ -605,6 +607,407 @@ final class OverlayListTests: XCTestCase {
 
         model.cancelRename()
         XCTAssertEqual(model.escapeAction(), .closePanel)
+    }
+
+    // MARK: - Sortieren (P8)
+
+    private var git: [LibraryItem] { store.items.filter { $0.cat == "Git" } }
+
+    func testZeileInnerhalbDerGruppeVerschieben() {
+        // Git/Status: [git status -sb, git log] → log vor status
+        let log = sample[1]
+        store.items = LibraryOrder.moveItem(store.items, id: log.id, to: .before(sample[0].id), in: "Git")
+
+        XCTAssertEqual(git.map(\.label), ["git log", "git status -sb", "git commit -m"])
+        XCTAssertEqual(git.map(\.group), ["Status", "Status", "Committen"])
+    }
+
+    func testZeileUeberGruppengrenzeVerschiebenSetztGroup() {
+        store.items = LibraryOrder.moveItem(store.items, id: sample[0].id,
+                                            to: .before(sample[2].id), in: "Git")
+
+        XCTAssertEqual(git.map(\.label), ["git log", "git status -sb", "git commit -m"])
+        XCTAssertEqual(store.items.first(where: { $0.id == sample[0].id })?.group, "Committen")
+        XCTAssertEqual(store.groups(in: "Git").map(\.name), ["Status", "Committen"])
+    }
+
+    func testZeileAnsEndeEinerGruppeVerschieben() {
+        store.items = LibraryOrder.moveItem(store.items, id: sample[0].id,
+                                            to: .endOfGroup("Committen"), in: "Git")
+        XCTAssertEqual(git.map(\.label), ["git log", "git commit -m", "git status -sb"])
+        XCTAssertEqual(git.last?.group, "Committen")
+    }
+
+    func testZeileInNochLeereGruppeVerschieben() {
+        XCTAssertTrue(store.addGroup("Neu", in: "Git"))
+        store.items = LibraryOrder.moveItem(store.items, id: sample[0].id,
+                                            to: .endOfGroup("Neu"), in: "Git")
+
+        XCTAssertEqual(store.groups(in: "Git").map(\.name), ["Status", "Committen", "Neu"])
+        XCTAssertEqual(store.groups(in: "Git").last?.items.map(\.label), ["git status -sb"])
+    }
+
+    func testVerschiebenLaesstAndereReiterUnberuehrt() {
+        let vorher = store.items.filter { $0.cat != "Git" }
+        store.items = LibraryOrder.moveItem(store.items, id: sample[0].id,
+                                            to: .endOfGroup("Committen"), in: "Git")
+        XCTAssertEqual(store.items.filter { $0.cat != "Git" }, vorher)
+    }
+
+    func testDropAufSichSelbstAendertNichts() {
+        let vorher = store.items
+        store.items = LibraryOrder.moveItem(store.items, id: sample[0].id,
+                                            to: .before(sample[0].id), in: "Git")
+        XCTAssertEqual(store.items, vorher)
+    }
+
+    // MARK: - Gruppe als Block verschieben
+
+    func testGruppeWandertAlsBlock() {
+        store.items = LibraryOrder.moveGroup(store.items, group: "Committen",
+                                             before: "Status", in: "Git")
+        XCTAssertEqual(git.map(\.label), ["git commit -m", "git status -sb", "git log"])
+        XCTAssertEqual(store.groups(in: "Git").map(\.name), ["Committen", "Status"])
+    }
+
+    func testGruppeAnsEndeVerschieben() {
+        store.items = LibraryOrder.moveGroup(store.items, group: "Status", before: nil, in: "Git")
+        XCTAssertEqual(git.map(\.label), ["git commit -m", "git status -sb", "git log"])
+        XCTAssertEqual(store.groups(in: "Git").first?.items.count, 1)
+        XCTAssertEqual(store.groups(in: "Git").last?.items.map(\.label), ["git status -sb", "git log"],
+                       "Reihenfolge im Block bleibt erhalten")
+    }
+
+    func testUnbekannteGruppeAendertNichts() {
+        let vorher = store.items
+        store.items = LibraryOrder.moveGroup(store.items, group: "Gibtsnicht", before: "Status", in: "Git")
+        XCTAssertEqual(store.items, vorher)
+    }
+
+    // MARK: - Gruppen anlegen und loeschen
+
+    func testLeereGruppeAnlegenUndLoeschen() {
+        XCTAssertTrue(store.addGroup("Notizen", in: "Git"))
+        XCTAssertEqual(store.groups(in: "Git").map(\.name), ["Status", "Committen", "Notizen"])
+        XCTAssertTrue(store.groups(in: "Git").last?.items.isEmpty ?? false)
+
+        XCTAssertTrue(store.removeGroup("Notizen", in: "Git"))
+        XCTAssertEqual(store.groups(in: "Git").map(\.name), ["Status", "Committen"])
+    }
+
+    /// Mit P9 entfaellt die Leer-Bedingung: die Gruppe geht samt Eintraegen.
+    func testNichtLeereGruppeIstLoeschbar() {
+        XCTAssertTrue(store.removeGroup("Status", in: "Git"))
+        XCTAssertEqual(store.groups(in: "Git").map(\.name), ["Committen"])
+        XCTAssertEqual(store.items(in: "Git").map(\.label), ["git commit -m"])
+    }
+
+    func testGruppeAnlegenLehntLeerUndDuplikatAb() {
+        XCTAssertFalse(store.addGroup("  ", in: "Git"))
+        XCTAssertFalse(store.addGroup("Status", in: "Git"))
+    }
+
+    // MARK: - Reiter anlegen, loeschen, umsortieren
+
+    func testLeerenReiterAnlegenUndLoeschen() {
+        XCTAssertTrue(store.addTab("Docker"))
+        XCTAssertEqual(store.tabs.last, "Docker")
+        XCTAssertTrue(store.removeTab("Docker"))
+        XCTAssertEqual(store.tabs, LibraryStore.defaultTabs)
+    }
+
+    /// Mit P9 entfaellt die Leer-Bedingung: der Reiter geht samt Eintraegen.
+    func testNichtLeererReiterIstLoeschbar() {
+        XCTAssertTrue(store.removeTab("Git"))
+        XCTAssertEqual(store.tabs, ["Claude", "Python", "zsh"])
+        XCTAssertTrue(store.items(in: "Git").isEmpty)
+    }
+
+    func testReiterAnlegenLehntLeerUndDuplikatAb() {
+        XCTAssertFalse(store.addTab(" "))
+        XCTAssertFalse(store.addTab("Git"))
+    }
+
+    func testReiterUmsortieren() {
+        store.moveTab("zsh", before: "Git")
+        XCTAssertEqual(store.tabs, ["zsh", "Git", "Claude", "Python"])
+
+        store.moveTab("zsh", before: nil)
+        XCTAssertEqual(store.tabs, ["Git", "Claude", "Python", "zsh"])
+    }
+
+    // MARK: - ⌘-Kuerzel
+
+    func testKuerzelFolgenDerReihenfolge() {
+        XCTAssertEqual(model.shortcut(for: "Git"), 1)
+        XCTAssertEqual(model.shortcut(for: "zsh"), 4)
+
+        store.moveTab("zsh", before: "Git")
+        XCTAssertEqual(model.shortcut(for: "zsh"), 1)
+        XCTAssertEqual(model.shortcut(for: "Git"), 2)
+    }
+
+    func testAbDemZehntenReiterKeinKuerzel() {
+        for nummer in 5 ... 12 { XCTAssertTrue(store.addTab("Reiter \(nummer)")) }
+        XCTAssertEqual(store.tabs.count, 12)
+
+        XCTAssertEqual(LibraryOrder.shortcut(forTabAt: 8), 9)
+        XCTAssertNil(LibraryOrder.shortcut(forTabAt: 9))
+        XCTAssertEqual(model.shortcut(for: store.tabs[8]), 9)
+        XCTAssertNil(model.shortcut(for: store.tabs[9]))
+    }
+
+    func testUnbekannterReiterHatKeinKuerzel() {
+        XCTAssertNil(model.shortcut(for: "Gibtsnicht"))
+    }
+
+    // MARK: - Keine Umsortierung bei aktiver Suche
+
+    func testBeiAktiverSucheWirdNichtSortiert() {
+        model.query = "git"
+        XCTAssertFalse(model.canReorder)
+
+        let vorher = store.items
+        model.moveItem(id: sample[0].id, to: .endOfGroup("Committen"))
+        model.moveGroup("Status", before: nil)
+        model.moveTab("zsh", before: "Git")
+        XCTAssertEqual(store.items, vorher)
+        XCTAssertEqual(store.tabs, LibraryStore.defaultTabs)
+        XCTAssertFalse(model.addGroup())
+        XCTAssertFalse(model.addTab())
+    }
+
+    // MARK: - Persistenz der Reihenfolge
+
+    func testReihenfolgeUeberlebtSpeichernUndLaden() throws {
+        let fileURL = tempDirectory.appendingPathComponent("order.json")
+        try JSONEncoder().encode(sample).write(to: fileURL)
+        let persistent = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try persistent.load()
+
+        persistent.moveGroup("Committen", before: "Status", in: "Git")
+        persistent.moveItem(id: sample[1].id, to: .endOfGroup("Committen"), in: "Git")
+        persistent.moveTab("zsh", before: "Git")
+        try persistent.save()
+
+        let reloaded = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try reloaded.load()
+        XCTAssertEqual(reloaded.tabs, ["zsh", "Git", "Claude", "Python"])
+        XCTAssertEqual(reloaded.items.filter { $0.cat == "Git" }.map(\.label),
+                       ["git commit -m", "git log", "git status -sb"])
+        XCTAssertEqual(reloaded.groups(in: "Git").map(\.name), ["Committen", "Status"])
+    }
+
+    func testLeereGruppeUeberlebtDenNeustartNicht() throws {
+        let fileURL = tempDirectory.appendingPathComponent("empty.json")
+        try JSONEncoder().encode(sample).write(to: fileURL)
+        let persistent = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try persistent.load()
+        XCTAssertTrue(persistent.addGroup("Leer", in: "Git"))
+        try persistent.save()
+
+        let reloaded = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try reloaded.load()
+        XCTAssertEqual(reloaded.groups(in: "Git").map(\.name), ["Status", "Committen"],
+                       "Folge der Grundsatzentscheidung: das Format kennt keine leere Gruppe")
+    }
+
+    func testLeererReiterUeberlebtDenNeustart() throws {
+        let fileURL = tempDirectory.appendingPathComponent("emptytab.json")
+        try JSONEncoder().encode(sample).write(to: fileURL)
+        let persistent = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try persistent.load()
+        XCTAssertTrue(persistent.addTab("Docker"))
+        try persistent.save()
+
+        let reloaded = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try reloaded.load()
+        XCTAssertEqual(reloaded.tabs, ["Git", "Claude", "Python", "zsh", "Docker"])
+    }
+
+    // MARK: - Beweis Root Cause P8-Bug (Plus in der Reiterleiste)
+
+    /// Prueft den gesamten Modellpfad hinter dem Plus-Knopf. Ist der gruen,
+    /// liegt der Fehler nicht im Model, sondern in der View.
+    func testAddTabLegtReiterAnUndStartetUmbenennung() {
+        let vorher = store.tabs
+
+        XCTAssertTrue(model.addTab(), "addTab meldet Erfolg")
+
+        XCTAssertEqual(store.tabs.count, vorher.count + 1)
+        XCTAssertEqual(store.tabs.last, "Neuer Reiter")
+        XCTAssertEqual(model.activeTab, "Neuer Reiter", "neuer Reiter ist aktiv")
+        XCTAssertEqual(model.renaming, .tab("Neuer Reiter"), "Namensfeld ist offen")
+        XCTAssertEqual(model.renameDraft, "Neuer Reiter")
+        XCTAssertEqual(model.requestedFocus, .rename)
+    }
+
+    func testNeuerReiterUeberlebtDasUmbenennenMitNeuemNamen() {
+        XCTAssertTrue(model.addTab())
+        model.renameDraft = "Docker"
+        XCTAssertTrue(model.commitRename(), "leerer Reiter muss umbenennbar sein")
+        XCTAssertEqual(store.tabs.last, "Docker")
+        XCTAssertEqual(model.activeTab, "Docker")
+    }
+
+    // MARK: - Loeschen und Undo (P9)
+
+    func testZeileLoeschenUndWiederherstellen() {
+        model.moveSelection(by: 1)                      // "git log", Index 1
+        XCTAssertEqual(model.selectedItem?.label, "git log")
+
+        XCTAssertTrue(model.deleteSelection())
+        XCTAssertEqual(git.map(\.label), ["git status -sb", "git commit -m"])
+        XCTAssertTrue(model.canUndo)
+        XCTAssertEqual(model.statusText, "Gelöscht · ⌘Z")
+
+        XCTAssertTrue(model.undoDelete())
+        XCTAssertEqual(git.map(\.label), ["git status -sb", "git log", "git commit -m"],
+                       "an derselben Position")
+        XCTAssertEqual(store.items, sample, "gesamtes Array identisch")
+        XCTAssertFalse(model.canUndo)
+    }
+
+    func testZeileAusDemSeedIstLoeschbar() {
+        XCTAssertTrue(model.deleteSelection())
+        XCTAssertFalse(store.items.contains(sample[0]))
+    }
+
+    func testGruppeMitEintraegenLoeschenUndUndo() {
+        XCTAssertEqual(store.groups(in: "Git").first?.items.count, 2)
+
+        XCTAssertTrue(model.deleteGroup("Status"))
+        XCTAssertEqual(git.map(\.label), ["git commit -m"])
+        XCTAssertEqual(store.groups(in: "Git").map(\.name), ["Committen"])
+
+        XCTAssertTrue(model.undoDelete())
+        XCTAssertEqual(store.items, sample)
+        XCTAssertEqual(store.groups(in: "Git").map(\.name), ["Status", "Committen"])
+    }
+
+    func testReiterMitEintraegenLoeschenUndUndoAnGleichemIndex() {
+        XCTAssertTrue(model.deleteTab("Claude"))
+        XCTAssertEqual(store.tabs, ["Git", "Python", "zsh"])
+        XCTAssertTrue(store.items(in: "Claude").isEmpty)
+
+        XCTAssertTrue(model.undoDelete())
+        XCTAssertEqual(store.tabs, LibraryStore.defaultTabs, "wieder an Index 1")
+        XCTAssertEqual(store.items, sample)
+    }
+
+    func testLetzterReiterIstLoeschbar() {
+        for tab in LibraryStore.defaultTabs { model.deleteTab(tab) }
+        XCTAssertTrue(store.tabs.isEmpty)
+        XCTAssertTrue(store.items.isEmpty)
+        XCTAssertEqual(model.activeTab, "")
+        XCTAssertTrue(model.rows.isEmpty)
+        XCTAssertTrue(model.entries.isEmpty)
+        XCTAssertEqual(model.statusText, "Gelöscht · ⌘Z")
+    }
+
+    func testLeererZustandBleibtBedienbar() {
+        for tab in LibraryStore.defaultTabs { model.deleteTab(tab) }
+
+        XCTAssertNil(model.selectedItem, "kein Absturz ohne Auswahl")
+        XCTAssertFalse(model.copySelection())
+        XCTAssertNil(model.addEntry(), "ohne Reiter kein Eintrag")
+        XCTAssertFalse(model.addGroup())
+        XCTAssertFalse(model.beginRename(.tab("")))
+        model.moveSelection(by: 1)
+        model.cycleTab(by: 1)
+        model.selectTab(number: 1)
+        XCTAssertEqual(model.activeTab, "")
+
+        XCTAssertTrue(model.addTab(), "+ legt wieder einen Reiter an")
+        XCTAssertEqual(model.activeTab, "Neuer Reiter")
+    }
+
+    func testLeererZustandIstSpeicherbarUndLadbar() throws {
+        let fileURL = tempDirectory.appendingPathComponent("leer.json")
+        try JSONEncoder().encode(sample).write(to: fileURL)
+        let persistent = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try persistent.load()
+        let persistentModel = OverlayViewModel(store: persistent)
+
+        for tab in LibraryStore.defaultTabs { persistentModel.deleteTab(tab) }
+        XCTAssertTrue(persistentModel.save())
+
+        let reloaded = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try reloaded.load()
+        XCTAssertTrue(reloaded.tabs.isEmpty)
+        XCTAssertTrue(reloaded.items.isEmpty)
+        XCTAssertEqual(OverlayViewModel(store: reloaded).activeTab, "")
+    }
+
+    func testDateiMitLeerenTabsUndItemsWirdGeladen() throws {
+        let fileURL = tempDirectory.appendingPathComponent("blank.json")
+        try Data(#"{"items":[],"tabs":[]}"#.utf8).write(to: fileURL)
+
+        let store = LibraryStore(fileURL: fileURL, seedURL: nil)
+        XCTAssertNoThrow(try store.load())
+        XCTAssertTrue(store.tabs.isEmpty)
+        XCTAssertTrue(store.items.isEmpty)
+        XCTAssertTrue(store.groups(in: "").isEmpty)
+    }
+
+    // MARK: - Undo verfaellt bei anderer Aktion
+
+    func testAndereAktionVerwirftDasUndo() {
+        XCTAssertTrue(model.deleteSelection())
+        XCTAssertTrue(model.canUndo)
+
+        model.moveSelection(by: 1)
+        XCTAssertFalse(model.canUndo)
+        XCTAssertFalse(model.undoDelete())
+        XCTAssertEqual(model.statusText, "2 Einträge")
+    }
+
+    func testKopierenVerdraengtDenLoeschhinweis() {
+        let spy = PasteboardSpy()
+        model.writeToPasteboard = spy.write
+        XCTAssertTrue(model.deleteSelection())
+
+        XCTAssertTrue(model.copySelection())
+        XCTAssertEqual(model.statusText, "Kopiert")
+        XCTAssertFalse(model.canUndo)
+    }
+
+    func testUmsortierenVerwirftDasUndo() {
+        XCTAssertTrue(model.deleteSelection())
+        model.moveGroup("Committen", before: "Status")
+        XCTAssertFalse(model.canUndo)
+    }
+
+    // MARK: - Kein Loeschen bei Suche, Fokus, Umbenennung
+
+    func testKeinLoeschenBeiAktiverSuche() {
+        model.query = "git"
+        XCTAssertFalse(model.canDelete)
+        XCTAssertFalse(model.deleteSelection())
+        XCTAssertFalse(model.deleteGroup("Status"))
+        XCTAssertFalse(model.deleteTab("Git"))
+        XCTAssertEqual(store.items, sample)
+    }
+
+    func testKeinLoeschenMitFokusImZeilenfeld() {
+        model.focusedField = .command(sample[0].id)
+        XCTAssertFalse(model.canDelete)
+        XCTAssertFalse(model.deleteSelection())
+        XCTAssertEqual(store.items, sample)
+    }
+
+    func testKeinLoeschenWaehrendUmbenennung() {
+        XCTAssertTrue(model.beginRename(.group("Status")))
+        XCTAssertFalse(model.canDelete)
+        XCTAssertFalse(model.deleteSelection())
+        XCTAssertFalse(model.deleteGroup("Status"))
+        XCTAssertFalse(model.deleteTab("Git"))
+        XCTAssertEqual(store.items, sample)
+    }
+
+    func testUndoOhneLoeschenIstNoOp() {
+        XCTAssertFalse(model.undoDelete())
+        XCTAssertEqual(store.items, sample)
     }
 
 }

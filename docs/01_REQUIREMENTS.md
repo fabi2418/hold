@@ -35,7 +35,7 @@ Aus jedem Reiter lässt sich ein Eintrag in unter 2 Sekunden kopieren (⌘ halte
 ## KANN (v1.0, nur wenn Zeit)
 - K1 Haltedauer (0,4–0,8 s) einstellbar.
 - K2 Start bei Login (SMAppService).
-- K3 Reiter und Gruppen umbenennen: Reitername inline in der Reiterleiste, Gruppentitel inline über der Gruppe. Umbenennen schreibt `cat` bzw. `group` in allen betroffenen Einträgen um und wird persistiert. Leere und bereits vergebene Namen werden abgelehnt, der alte Name bleibt stehen. Ein Reiter ohne Einträge ist nicht umbenennbar. Gruppen werden nur innerhalb des aktiven Reiters umbenannt.
+- K3 Reiter und Gruppen umbenennen: Reitername inline in der Reiterleiste, Gruppentitel inline über der Gruppe. Umbenennen schreibt `cat` bzw. `group` in allen betroffenen Einträgen um und wird persistiert. Leere und bereits vergebene Namen werden abgelehnt, der alte Name bleibt stehen. Gruppen werden nur innerhalb des aktiven Reiters umbenannt. (Die ursprüngliche Einschränkung „ein Reiter ohne Einträge ist nicht umbenennbar" ist mit P8 entfallen, weil dort leere Reiter absichtlich angelegt werden.)
 
 ## Nicht-Ziele v1.0
 - Kein Sync/iCloud, keine Multi-Device-Library.
@@ -44,13 +44,12 @@ Aus jedem Reiter lässt sich ein Eintrag in unter 2 Sekunden kopieren (⌘ halte
 - Keine Windows/Linux-Version, keine Sandbox/App-Store-Fassung (Event-Tap verträgt sich nicht mit Sandbox).
 
 ## Iterationsliste (v1.1-Kandidaten)
+> Sortieren und modulare Reiter (Zeilen und Gruppen per Drag, Gruppen und Reiter anlegen/löschen) sind nach P8 in `02_PAKETPLAN.md` gezogen.
 - Scan von `~/.claude/skills/*/SKILL.md` beim Start → Name + description automatisch in den Claude-Reiter (Frontmatter parsen; Duplikate per Name erkennen).
 - Einfügen statt nur Kopieren (CGEvent ⌘V simulieren) — zusätzliche Berechtigungsfragen prüfen.
-- Reiter frei konfigurierbar; Export/Import der Library.
+- Export/Import der Library.
 - Sichtbarer Hinweis im Overlay, wenn `library.json` nicht geladen werden konnte (aktuell nur Log, Panel bleibt leer).
 - Menü-Eintrag „Overlay öffnen (Test)" kollidiert mit dem Schließen bei Fokusverlust (Panel schließt und öffnet sofort wieder). Entfernen oder umbauen, wenn er nach P0 noch gebraucht wird.
-- Gruppen anlegen und löschen (K3 deckt nur Umbenennen ab).
-- Gruppen per Drag verschieben. Achtung: Die Gruppenreihenfolge ist derzeit aus der Reihenfolge der Einträge abgeleitet, nicht gespeichert. Erfordert entweder Umsortieren des `items`-Arrays oder ein explizites Ordnungsfeld im Dateiformat.
 
 ## Edge Cases (aus den SCR-Karten)
 - Auswahl-Index bei Filterwechsel auf gültigen Bereich klemmen; ⌘C ohne sichtbare Zeile: no-op.

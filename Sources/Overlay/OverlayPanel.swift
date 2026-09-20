@@ -23,6 +23,8 @@ final class OverlayPanel: NSPanel {
         static let down: UInt16 = 125
         static let up: UInt16 = 126
         static let c: UInt16 = 8
+        static let z: UInt16 = 6
+        static let backspace: UInt16 = 51
     }
 
     init(model: OverlayViewModel) {
@@ -122,6 +124,10 @@ final class OverlayPanel: NSPanel {
         let hasCommand = event.modifierFlags.contains(.command)
         let hasControl = event.modifierFlags.contains(.control)
 
+        if hasCommand, event.charactersIgnoringModifiers?.lowercased() == "z" || event.keyCode == Key.z {
+            return model.undoDelete()
+        }
+
         if isCopyKey(event) {
             if hasCommand && searchFieldHasSelection { return false }
             guard hasCommand || hasControl else { return false }
@@ -155,6 +161,9 @@ final class OverlayPanel: NSPanel {
             guard !model.blocksNavigationKeys else { return false }
             model.moveSelection(by: 1)
             return true
+        case Key.backspace:
+            guard model.canDelete else { return false }
+            return model.deleteSelection()
         case Key.left, Key.right:
             guard !model.isSearching, !model.blocksNavigationKeys else { return false }
             model.cycleTab(by: event.keyCode == Key.left ? -1 : 1)

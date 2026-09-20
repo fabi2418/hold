@@ -45,6 +45,50 @@ Abnahme:
 Haltedauer-Setting, Start bei Login, Panel auf Screen mit Mauszeiger, App-Icon.
 Abnahme: je umgesetztem Punkt ein manueller Test; nichts davon blockiert v1.0.
 
+## P8 · Sortieren und modulare Reiter (v1.1)
+Aus der Iterationsliste hierher gezogen: Gruppen anlegen und löschen, Gruppen per Drag verschieben, Reiter frei konfigurierbar.
+
+Grundsatzentscheidung: **Die Reihenfolge des `items`-Arrays in `library.json` IST die Ordnung.** Kein zusätzliches Ordnungsfeld, keine Formatänderung. Die Gruppenreihenfolge bleibt „erstes Auftreten".
+
+Umfang:
+- Zeile per Drag verschieben, innerhalb der Gruppe und über Gruppengrenzen (`group` wird gesetzt). Drop-Indikator zwischen den Zeilen.
+- Ganze Gruppe per Drag verschieben; der zusammenhängende Block ihrer Einträge wandert geschlossen.
+- Gruppe anlegen und löschen. ~~Löschen nur, wenn die Gruppe leer ist.~~ (Leer-Bedingung mit P9 entfallen.)
+- Reiter anlegen, löschen und per Drag umsortieren. ~~Löschen nur, wenn der Reiter leer ist.~~ (Leer-Bedingung mit P9 entfallen.)
+- ⌘1–n folgt der Reiterreihenfolge; ab dem 10. Reiter kein Kürzel mehr.
+- Bei aktiver Suche kein Drag: die flache Trefferliste hat keine gültige Zielposition.
+- Persistenz über `store.save()` wie bisher.
+
+Folge der Grundsatzentscheidung: Eine Gruppe ohne Einträge existiert nur zur Laufzeit, weil das Format sie nicht abbilden kann. Ein leerer Reiter überlebt dagegen einen Neustart, weil `tabs` seit K3 gespeichert wird.
+
+Abnahme:
+- [ ] Zeile innerhalb der Gruppe und in eine andere Gruppe ziehen; nach Schließen und App-Neustart steht sie noch dort
+- [ ] Ganze Gruppe verschieben; ihre Einträge bleiben zusammen und in gleicher Reihenfolge
+- [ ] Gruppe anlegen, Zeile hineinziehen, leere Gruppe löschen (die Einschränkung auf leere Gruppen ist mit P9 entfallen)
+- [ ] Reiter anlegen, umsortieren, leeren Reiter löschen (die Einschränkung auf leere Reiter ist mit P9 entfallen)
+- [ ] ⌘1–n trifft nach dem Umsortieren den jeweils richtigen Reiter; der 10. Reiter hat kein Kürzel
+- [ ] Bei aktiver Suche startet kein Drag
+
+## P9 · Löschen ohne Leer-Bedingung (v1.1)
+Hebt die „nur wenn leer"-Regel aus P8 auf: Zeilen, Gruppen und Reiter sind jederzeit löschbar, abgesichert durch ein einstufiges Undo.
+
+Umfang:
+- Einzelne Zeile löschen, gleich ob aus dem Seed oder neu. Bedienung: Auswahl + ⌫, und ein Löschen-Knopf, der bei Hover auf der Zeile erscheint.
+- Gruppe löschen, auch mit Einträgen; alle Einträge der Gruppe im aktiven Reiter gehen mit.
+- Reiter löschen, auch mit Einträgen; alle seine Einträge gehen mit. Auch der letzte Reiter ist löschbar.
+- Leerer Zustand: 0 Reiter und 0 Einträge sind gültig. Das Overlay zeigt dann nur Suchzeile, „+" und Fußleiste. `activeTab` ist `""`.
+- Undo: Das letzte Löschen ist per ⌘Z rückgängig zu machen, inklusive ursprünglicher Position und Reiter-Index. Eine Ebene, kein Stack; jede andere Aktion verwirft es. Bis dahin steht „Gelöscht · ⌘Z" in der Fußleiste.
+- Kein Löschen bei aktiver Suche, bei fokussiertem Feld oder laufender Umbenennung.
+- Persistenz über `store.save()`, auch beim Undo.
+
+Abnahme:
+- [ ] Zeile per ⌫ und per Hover-Knopf löschen; ⌘Z stellt sie an derselben Position wieder her
+- [ ] Gruppe mit mehreren Einträgen löschen; ⌘Z bringt alle zurück, in gleicher Reihenfolge
+- [ ] Reiter mit Einträgen löschen; ⌘Z setzt ihn an seinen alten Index zurück
+- [ ] Alles löschen bis 0 Reiter: Overlay bleibt bedienbar, „+" legt einen neuen Reiter an, App-Neustart lädt den leeren Zustand
+- [ ] Nach einer anderen Aktion (Auswahl, Kopieren, Suche) ist ⌘Z wirkungslos und der Fußzeilenhinweis weg
+- [ ] Bei aktiver Suche, im Editierfeld und während einer Umbenennung löscht ⌫ nichts
+
 ## P7 · Release
 Release-Build, README (Installation, Berechtigung, Bedienung), Tag v1.0, Re-Entry-Doku.
 Abnahme:

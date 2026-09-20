@@ -5,6 +5,11 @@ import SwiftUI
 struct OverlayView: View {
     @ObservedObject var model: OverlayViewModel
     @FocusState private var focus: OverlayFocus?
+    /// Was gerade gezogen wird und wo der Drop-Indikator steht (P8).
+    @State private var dragging: DragItem?
+    @State private var dropTarget: DragItem?
+    /// Zeile unter dem Mauszeiger; blendet den Loeschen-Knopf ein (P9).
+    @State private var hoveredRow: UUID?
 
     private var store: LibraryStore { model.store }
 
@@ -71,16 +76,23 @@ struct OverlayView: View {
 
     private var tabBar: some View {
         HStack(spacing: 4) {
-            ForEach(Array(model.tabs.enumerated()), id: \.element) { index, tab in
-                tabButton(tab, shortcut: index + 1)
+            ForEach(model.tabs, id: \.self) { tab in
+                tabButton(tab, shortcut: model.shortcut(for: tab))
+                    .overlay(alignment: .leading) { dropLine(for: .tab(tab), vertical: true) }
+                    .onDrag { beginDrag(.tab(tab)) }
+                    .onDrop(of: [.text], isTargeted: targetBinding(.tab(tab))) { _ in
+                        drop(before: .tab(tab))
+                    }
             }
+            addTabButton
             Spacer()
         }
         .padding(.horizontal, 22)
+        .onDrop(of: [.text], isTargeted: nil) { _ in drop(before: nil) }
     }
 
     @ViewBuilder
-    private func tabButton(_ tab: String, shortcut: Int) -> some View {
+    private func tabButton(_ tab: String, shortcut: Int?) -> some View {
         if model.renaming == .tab(tab) {
             renameField(width: 90)
                 .padding(.horizontal, 16)
@@ -90,7 +102,26 @@ struct OverlayView: View {
         }
     }
 
-    private func tabLabel(_ tab: String, shortcut: Int) -> some View {
+    private var addTabButton: some View {
+        Button { model.addTab() } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.secondary)
+                .frame(width: 26, height: 26)
+                // Ohne Fuellung ist nur das Glyph klickbar: strokeBorder zeichnet
+                // eine Linie, .frame nur Layout. contentShape macht die ganze
+                // Flaeche treffbar.
+                .contentShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Theme.dashedBorder, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                )
+        }
+        .buttonStyle(.plain)
+        .help("Reiter hinzufügen")
+    }
+
+    private func tabLabel(_ tab: String, shortcut: Int?) -> some View {
         let isActive = tab == model.activeTab && !model.isSearching
         return Button {
             model.selectTab(tab)
@@ -103,15 +134,20 @@ struct OverlayView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(isActive ? Theme.text : Theme.secondary)
                     .opacity(0.65)
-                Text("⌘\(shortcut)")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Theme.secondary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .strokeBorder(Theme.border, lineWidth: 1)
-                    )
+                if let shortcut {
+                    Text("⌘\(shortcut)")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Theme.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .strokeBorder(Theme.border, lineWidth: 1)
+                        )
+                }
+                if model.canDeleteTab(tab) {
+                    deleteButton { model.deleteTab(tab) }
+                }
             }
             .fixedSize()
             .padding(.horizontal, 16)
@@ -155,7 +191,9 @@ struct OverlayView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    if model.rows.isEmpty && model.isSearching {
+                    if model.tabs.isEmpty {
+                        EmptyView()
+                    } else if model.rows.isEmpty && model.isSearching {
                         emptyState
                     } else {
                         columnHeader
@@ -199,10 +237,87 @@ struct OverlayView: View {
                 case .item(let item, let index):
                     row(item, index: index, isSelected: index == model.selection)
                         .id(item.id.uuidString)
+                        .overlay(alignment: .top) { dropLine(for: .row(item.id), vertical: false) }
+                        .onDrag { beginDrag(.row(item.id)) }
+                        .onDrop(of: [.text], isTargeted: targetBinding(.row(item.id))) { _ in
+                            drop(before: .row(item.id))
+                        }
                         .padding(.bottom, 8)
                 }
             }
+            if !model.isSearching { addGroupButton }
         }
+    }
+
+    private var addGroupButton: some View {
+        Button { model.addGroup() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus").font(.system(size: 10))
+                Text("Gruppe hinzufügen").font(.system(size: 12))
+            }
+            .foregroundStyle(Theme.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.fieldRadius)
+                    .strokeBorder(Theme.dashedBorder, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 14)
+    }
+
+    // MARK: - Drag and Drop (P8)
+
+    private func beginDrag(_ item: DragItem) -> NSItemProvider {
+        dragging = model.canReorder ? item : nil
+        return NSItemProvider(object: NSString(string: item.id))
+    }
+
+    private func targetBinding(_ item: DragItem) -> Binding<Bool> {
+        Binding(
+            get: { dropTarget == item },
+            set: { isTargeted in
+                if isTargeted { dropTarget = item } else if dropTarget == item { dropTarget = nil }
+            }
+        )
+    }
+
+    /// Ein 2-pt-Strich in Akzentfarbe an der Einfuegestelle.
+    @ViewBuilder
+    private func dropLine(for item: DragItem, vertical: Bool) -> some View {
+        if dropTarget == item, dragging != nil, dragging != item {
+            Rectangle()
+                .fill(Theme.accent)
+                .frame(width: vertical ? 2 : nil, height: vertical ? nil : 2)
+        }
+    }
+
+    /// `before == nil` heisst ans Ende der jeweiligen Liste.
+    private func drop(before target: DragItem?) -> Bool {
+        defer {
+            dragging = nil
+            dropTarget = nil
+        }
+        guard model.canReorder, let source = dragging, source != target else { return false }
+
+        switch (source, target) {
+        case (.row(let id), .row(let targetID)):
+            model.moveItem(id: id, to: .before(targetID))
+        case (.row(let id), .group(let name)):
+            model.moveItem(id: id, to: .endOfGroup(name))
+        case (.group(let name), .group(let targetName)):
+            model.moveGroup(name, before: targetName)
+        case (.group(let name), nil):
+            model.moveGroup(name, before: nil)
+        case (.tab(let name), .tab(let targetName)):
+            model.moveTab(name, before: targetName)
+        case (.tab(let name), nil):
+            model.moveTab(name, before: nil)
+        default:
+            return false
+        }
+        return true
     }
 
     /// Scrollt mit dem Inhalt, bewusst ohne Trennlinie.
@@ -215,7 +330,7 @@ struct OverlayView: View {
                 .frame(width: Theme.descriptionWidth, alignment: .leading)
             Text("COMMAND / PROMPT")
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Color.clear.frame(width: Theme.copyButtonWidth, height: 1)
+            Color.clear.frame(width: Theme.copyButtonWidth + Theme.rowGap + 28, height: 1)
         }
         .font(.system(size: 11, weight: .semibold))
         .tracking(11 * 0.06)
@@ -230,13 +345,36 @@ struct OverlayView: View {
                 .padding(.top, 14)
                 .padding(.bottom, 2)
         } else {
-            Text(name)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.text)
-                .padding(.top, 14)
-                .padding(.bottom, 2)
-                .onTapGesture(count: 2) { model.beginRename(.group(name)) }
+            HStack(spacing: 6) {
+                Text(name)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.text)
+                if model.canDeleteGroup(name) {
+                    deleteButton { model.deleteGroup(name) }
+                }
+            }
+            .padding(.top, 14)
+            .padding(.bottom, 2)
+            .overlay(alignment: .top) { dropLine(for: .group(name), vertical: false) }
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) { model.beginRename(.group(name)) }
+            .onDrag { beginDrag(.group(name)) }
+            .onDrop(of: [.text], isTargeted: targetBinding(.group(name))) { _ in
+                drop(before: .group(name))
+            }
         }
+    }
+
+    private func deleteButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(Theme.secondary)
+                .frame(width: 14, height: 14)
+                .background(Circle().fill(Theme.divider))
+        }
+        .buttonStyle(.plain)
+        .help("Löschen")
     }
 
     private func row(_ item: LibraryItem, index: Int, isSelected: Bool) -> some View {
@@ -266,6 +404,10 @@ struct OverlayView: View {
             .background(fieldBackground(Theme.commandField, border: Theme.border))
 
             copyButton(for: item, index: index)
+            rowDeleteButton(for: item)
+        }
+        .onHover { inside in
+            if inside { hoveredRow = item.id } else if hoveredRow == item.id { hoveredRow = nil }
         }
         .padding(.vertical, 4)
         .padding(.horizontal, Theme.rowInset)
@@ -335,6 +477,28 @@ struct OverlayView: View {
                 RoundedRectangle(cornerRadius: Theme.fieldRadius)
                     .strokeBorder(border, lineWidth: 1)
             )
+    }
+
+    /// Erscheint bei Hover; der Platz bleibt immer reserviert, damit die
+    /// Zeile beim Ueberfahren nicht springt (P9).
+    @ViewBuilder
+    private func rowDeleteButton(for item: LibraryItem) -> some View {
+        if hoveredRow == item.id && model.canDelete {
+            Button {
+                model.select(index: model.rows.firstIndex(where: { $0.id == item.id }) ?? 0)
+                model.deleteSelection()
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.secondary)
+                    .frame(width: 28, height: Theme.fieldHeight)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Zeile löschen (⌫)")
+        } else {
+            Color.clear.frame(width: 28, height: Theme.fieldHeight)
+        }
     }
 
     /// Kopiert die Zeile und setzt die Auswahl dorthin (M8).

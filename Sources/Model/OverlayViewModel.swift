@@ -39,6 +39,9 @@ final class OverlayViewModel: ObservableObject {
     /// das erfaehrt die View nichts von Aenderungen an store.items.
     private var storeObserver: AnyCancellable?
 
+    /// Letzter Loeschvorgang fuer ⌘Z. Eine Ebene, kein Stack (P9).
+    @Published private(set) var undoState: UndoState?
+
     /// Laeuft eine Umbenennung, und mit welchem Entwurfstext (K3).
     @Published private(set) var renaming: RenameTarget?
     @Published var renameDraft: String = ""
@@ -83,9 +86,14 @@ final class OverlayViewModel: ObservableObject {
 
     var hasCopyFeedback: Bool { copiedItemID != nil }
 
-    /// Rechts in der Fussleiste: Kopier-Status verdraengt die Zeilenzahl.
+    var canUndo: Bool { undoState != nil }
+
+    /// Rechts in der Fussleiste: Kopier- und Loesch-Status verdraengen die
+    /// Zeilenzahl, bis die naechste Aktion kommt.
     var statusText: String {
-        hasCopyFeedback ? "Kopiert" : "\(rows.count) Einträge"
+        if hasCopyFeedback { return "Kopiert" }
+        if canUndo { return "Gelöscht · ⌘Z" }
+        return "\(rows.count) Einträge"
     }
 
     // MARK: - Navigation
@@ -157,6 +165,155 @@ final class OverlayViewModel: ObservableObject {
         requestFocus(.search)
     }
 
+    // MARK: - Loeschen und Undo (P9)
+
+    /// Nur bei leerer Suche, ohne fokussiertes Zeilenfeld und ohne laufende
+    /// Umbenennung. Das leere Suchfeld selbst zaehlt nicht als Feld: dort gibt
+    /// es keinen Text, den ⌫ sonst loeschen koennte.
+    var canDelete: Bool { query.isEmpty && !blocksNavigationKeys }
+
+    private func rememberForUndo() {
+        copiedItemID = nil
+        undoState = UndoState(snapshot: store.snapshot(), activeTab: activeTab, selection: selection)
+    }
+
+    @discardableResult
+    func deleteSelection() -> Bool {
+        guard canDelete, let item = selectedItem else { return false }
+        rememberForUndo()
+        guard store.removeItem(id: item.id) else { undoState = nil; return false }
+        selection = LibraryStore.clamp(selection, count: rows.count)
+        save()
+        log.info("Zeile gelöscht")
+        return true
+    }
+
+    @discardableResult
+    func deleteGroup(_ name: String) -> Bool {
+        guard canReorder, !isRenaming else { return false }
+        rememberForUndo()
+        guard store.removeGroup(name, in: activeTab) else { undoState = nil; return false }
+        selection = LibraryStore.clamp(selection, count: rows.count)
+        save()
+        log.info("Gruppe gelöscht")
+        return true
+    }
+
+    @discardableResult
+    func deleteTab(_ name: String) -> Bool {
+        guard canReorder, !isRenaming else { return false }
+        rememberForUndo()
+        guard store.removeTab(name) else { undoState = nil; return false }
+        if activeTab == name { activeTab = store.tabs.first ?? "" }
+        selection = 0
+        save()
+        log.info("Reiter gelöscht")
+        return true
+    }
+
+    /// ⌘Z: stellt den Zustand vor dem letzten Loeschen wieder her.
+    @discardableResult
+    func undoDelete() -> Bool {
+        guard let state = undoState else { return false }
+        store.restore(state.snapshot)
+        activeTab = state.activeTab
+        selection = LibraryStore.clamp(state.selection, count: rows.count)
+        undoState = nil
+        copiedItemID = nil
+        save()
+        log.info("Löschen rückgängig gemacht")
+        return true
+    }
+
+    // MARK: - Sortieren und Struktur (P8)
+
+    /// Bei aktiver Suche ist die Liste flach und hat keine gueltige
+    /// Zielposition — dann wird nicht gezogen.
+    var canReorder: Bool { !isSearching }
+
+    func shortcut(for tab: String) -> Int? {
+        guard let index = store.tabs.firstIndex(of: tab) else { return nil }
+        return LibraryOrder.shortcut(forTabAt: index)
+    }
+
+    /// Seit P9 ohne Leer-Bedingung: geloescht werden darf jederzeit, solange
+    /// nicht gesucht oder umbenannt wird.
+    func canDeleteGroup(_ name: String) -> Bool { canReorder && !isRenaming }
+    func canDeleteTab(_ name: String) -> Bool { canReorder && !isRenaming }
+
+    func moveItem(id: UUID, to position: DropPosition) {
+        guard canReorder else { return }
+        clearCopyFeedback()
+        store.moveItem(id: id, to: position, in: activeTab)
+        save()
+    }
+
+    func moveGroup(_ group: String, before target: String?) {
+        guard canReorder else { return }
+        clearCopyFeedback()
+        store.moveGroup(group, before: target, in: activeTab)
+        save()
+    }
+
+    func moveTab(_ tab: String, before target: String?) {
+        guard canReorder else { return }
+        clearCopyFeedback()
+        store.moveTab(tab, before: target)
+        save()
+    }
+
+    /// Legt eine leere Gruppe mit eindeutigem Vorschlagsnamen an und startet
+    /// sofort die Umbenennung.
+    @discardableResult
+    func addGroup() -> Bool {
+        guard canReorder else { return false }
+        let name = Self.uniqueName("Neue Gruppe", taken: store.groups(in: activeTab).map(\.name))
+        guard store.addGroup(name, in: activeTab) else { return false }
+        beginRename(.group(name))
+        return true
+    }
+
+    @discardableResult
+    func removeGroup(_ name: String) -> Bool {
+        guard canReorder, store.removeGroup(name, in: activeTab) else { return false }
+        save()
+        return true
+    }
+
+    /// Legt einen leeren Reiter an, macht ihn aktiv und startet die Umbenennung.
+    @discardableResult
+    func addTab() -> Bool {
+        guard canReorder else { return false }
+        let name = Self.uniqueName("Neuer Reiter", taken: store.tabs)
+        guard store.addTab(name) else {
+            log.error("Reiter anlegen abgelehnt: \(name, privacy: .public)")
+            return false
+        }
+        activeTab = name
+        selection = 0
+        save()
+        beginRename(.tab(name))
+        log.info("Reiter angelegt: \(name, privacy: .public), Umbenennung gestartet")
+        return true
+    }
+
+    @discardableResult
+    func removeTab(_ name: String) -> Bool {
+        guard canReorder, canDeleteTab(name), store.removeTab(name) else { return false }
+        if activeTab == name { activeTab = store.tabs.first ?? "" }
+        selection = 0
+        save()
+        return true
+    }
+
+    /// "Neue Gruppe", "Neue Gruppe 2", ... — der erste freie Name.
+    static func uniqueName(_ base: String, taken: [String]) -> String {
+        guard taken.contains(base) else { return base }
+        var counter = 2
+        while taken.contains("\(base) \(counter)") { counter += 1 }
+        return "\(base) \(counter)"
+    }
+
     // MARK: - Umbenennen (K3)
 
     /// Startet die Umbenennung. Bei aktiver Suche und bei einem Reiter ohne
@@ -166,7 +323,7 @@ final class OverlayViewModel: ObservableObject {
         guard !isSearching else { return false }
         switch target {
         case .tab(let name):
-            guard store.tabs.contains(name), !store.items(in: name).isEmpty else { return false }
+            guard store.tabs.contains(name) else { return false }
             renameDraft = name
         case .group(let name):
             guard store.groups(in: activeTab).contains(where: { $0.name == name }) else { return false }
@@ -221,7 +378,8 @@ final class OverlayViewModel: ObservableObject {
     /// Neue leere Zeile am Ende der letzten Gruppe des aktiven Reiters (SCR-05).
     /// Ein leerer Reiter bekommt die Gruppe "Allgemein".
     @discardableResult
-    func addEntry() -> LibraryItem {
+    func addEntry() -> LibraryItem? {
+        guard !activeTab.isEmpty else { return nil }
         clearCopyFeedback()
         if isSearching { query = "" }
         let group = store.groups(in: activeTab).last?.name ?? "Allgemein"
@@ -262,6 +420,7 @@ final class OverlayViewModel: ObservableObject {
     @discardableResult
     func copy(_ item: LibraryItem) -> Bool {
         guard !item.label.isEmpty else { return false }
+        undoState = nil
         guard writeToPasteboard(item.label) else {
             copiedItemID = nil
             return false
@@ -272,6 +431,7 @@ final class OverlayViewModel: ObservableObject {
 
     func clearCopyFeedback() {
         copiedItemID = nil
+        undoState = nil
     }
 
     static func writeToSystemPasteboard(_ text: String) -> Bool {

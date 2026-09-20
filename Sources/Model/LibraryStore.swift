@@ -34,6 +34,12 @@ final class LibraryStore: ObservableObject {
     @Published var items: [LibraryItem] = []
     @Published private(set) var tabs: [String] = LibraryStore.defaultTabs
 
+    /// Gruppen ohne Eintraege leben nur zur Laufzeit: das Dateiformat leitet
+    /// die Gruppenreihenfolge aus den Eintraegen ab und kann eine leere Gruppe
+    /// nicht abbilden (Grundsatzentscheidung P8). Reiter dagegen sind seit K3
+    /// gespeichert und ueberleben leer einen Neustart.
+    private var emptyGroups: [String: [String]] = [:]
+
     /// Nur ein erfolgreicher load() setzt das Flag. Solange es false ist,
     /// verweigert save() den Write und schuetzt die Datei auf der Platte.
     private(set) var isLoaded = false
@@ -119,7 +125,8 @@ final class LibraryStore: ObservableObject {
         items.filter { $0.cat == cat }
     }
 
-    /// Gruppen eines Reiters in der Reihenfolge ihres ersten Auftretens.
+    /// Gruppen eines Reiters in der Reihenfolge ihres ersten Auftretens,
+    /// gefolgt von den zur Laufzeit angelegten leeren Gruppen.
     func groups(in cat: String) -> [(name: String, items: [LibraryItem])] {
         var order: [String] = []
         var buckets: [String: [LibraryItem]] = [:]
@@ -127,7 +134,11 @@ final class LibraryStore: ObservableObject {
             if buckets[item.group] == nil { order.append(item.group) }
             buckets[item.group, default: []].append(item)
         }
-        return order.map { (name: $0, items: buckets[$0] ?? []) }
+        var result = order.map { (name: $0, items: buckets[$0] ?? []) }
+        for name in emptyGroups[cat, default: []] where buckets[name] == nil {
+            result.append((name: name, items: []))
+        }
+        return result
     }
 
     /// Globale Suche ueber alle Reiter (M7). Leere Query liefert alle Eintraege.
@@ -139,6 +150,90 @@ final class LibraryStore: ObservableObject {
     static func clamp(_ index: Int, count: Int) -> Int {
         guard count > 0 else { return 0 }
         return min(max(index, 0), count - 1)
+    }
+
+    // MARK: - Sortieren und Struktur (P8)
+
+    func moveItem(id: UUID, to position: DropPosition, in tab: String) {
+        items = LibraryOrder.moveItem(items, id: id, to: position, in: tab)
+    }
+
+    func moveGroup(_ group: String, before target: String?, in tab: String) {
+        items = LibraryOrder.moveGroup(items, group: group, before: target, in: tab)
+    }
+
+    func moveTab(_ tab: String, before target: String?) {
+        tabs = LibraryOrder.moveTab(tabs, tab, before: target)
+    }
+
+    /// Legt eine noch leere Gruppe an. Abgelehnt: leerer und vergebener Name.
+    @discardableResult
+    func addGroup(_ name: String, in tab: String) -> Bool {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, tabs.contains(tab) else { return false }
+        guard !groups(in: tab).contains(where: { $0.name == clean }) else { return false }
+        emptyGroups[tab, default: []].append(clean)
+        objectWillChange.send()
+        return true
+    }
+
+    /// Loescht eine Gruppe samt ihrer Eintraege im angegebenen Reiter (P9).
+    @discardableResult
+    func removeGroup(_ name: String, in tab: String) -> Bool {
+        let hadItems = items.contains { $0.cat == tab && $0.group == name }
+        let wasEmptyGroup = emptyGroups[tab, default: []].contains(name)
+        guard hadItems || wasEmptyGroup else { return false }
+        items.removeAll { $0.cat == tab && $0.group == name }
+        emptyGroups[tab]?.removeAll { $0 == name }
+        objectWillChange.send()
+        return true
+    }
+
+    /// Loescht eine einzelne Zeile (P9).
+    @discardableResult
+    func removeItem(id: UUID) -> Bool {
+        guard items.contains(where: { $0.id == id }) else { return false }
+        items.removeAll { $0.id == id }
+        return true
+    }
+
+    /// Legt einen leeren Reiter an. Abgelehnt: leerer und vergebener Name.
+    @discardableResult
+    func addTab(_ name: String) -> Bool {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, !tabs.contains(clean) else { return false }
+        tabs.append(clean)
+        return true
+    }
+
+    /// Loescht einen Reiter samt aller seiner Eintraege (P9). Auch der
+    /// letzte Reiter ist loeschbar; 0 Reiter sind ein gueltiger Zustand.
+    @discardableResult
+    func removeTab(_ name: String) -> Bool {
+        guard let index = tabs.firstIndex(of: name) else { return false }
+        tabs.remove(at: index)
+        items.removeAll { $0.cat == name }
+        emptyGroups[name] = nil
+        return true
+    }
+
+    // MARK: - Undo (P9)
+
+    /// Vollstaendiger Zustand fuer ein einstufiges Undo. Ein Schnappschuss
+    /// statt einer Rueckgaengig-Logik je Operation: er stellt Position,
+    /// Gruppe und Reiter-Index ohne Sonderfaelle wieder her.
+    struct Snapshot: Equatable {
+        let tabs: [String]
+        let items: [LibraryItem]
+    }
+
+    func snapshot() -> Snapshot {
+        Snapshot(tabs: tabs, items: items)
+    }
+
+    func restore(_ snapshot: Snapshot) {
+        tabs = snapshot.tabs
+        items = snapshot.items
     }
 
     // MARK: - Umbenennen (K3)
@@ -153,9 +248,9 @@ final class LibraryStore: ObservableObject {
         guard let index = tabs.firstIndex(of: old) else { return false }
         if name == old { return true }
         guard !tabs.contains(name) else { return false }
-        guard !items(in: old).isEmpty else { return false }
 
         tabs[index] = name
+        emptyGroups[name] = emptyGroups.removeValue(forKey: old)
         for position in items.indices where items[position].cat == old {
             items[position].cat = name
         }
@@ -173,6 +268,10 @@ final class LibraryStore: ObservableObject {
         if name == old { return true }
         guard !existing.contains(name) else { return false }
 
+        if let at = emptyGroups[tab, default: []].firstIndex(of: old) {
+            emptyGroups[tab]?[at] = name
+            objectWillChange.send()
+        }
         for position in items.indices where items[position].cat == tab && items[position].group == old {
             items[position].group = name
         }
