@@ -56,6 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        if model.save() { log.info("Library beim Beenden gespeichert") }
+    }
+
     func menuNeedsUpdate(_ menu: NSMenu) {
         let trusted = AXIsProcessTrusted()
         let tapState = monitor.isRunning ? "Tap aktiv" : "Tap inaktiv"

@@ -4,7 +4,7 @@ import SwiftUI
 /// Kopieren (P4) sowie Editieren und Anlegen (P5) sind noch nicht aktiv.
 struct OverlayView: View {
     @ObservedObject var model: OverlayViewModel
-    @FocusState private var searchFocused: Bool
+    @FocusState private var focus: OverlayFocus?
 
     private var store: LibraryStore { model.store }
 
@@ -25,8 +25,9 @@ struct OverlayView: View {
             RoundedRectangle(cornerRadius: Theme.panelRadius)
                 .strokeBorder(Theme.border, lineWidth: 1)
         )
-        .onAppear { searchFocused = true }
-        .onChange(of: model.focusRequest) { searchFocused = true }
+        .onAppear { focus = .search }
+        .onChange(of: model.focusRequest) { focus = model.requestedFocus }
+        .onChange(of: focus) { _, neu in model.focusedField = neu }
     }
 
     private var hairline: some View {
@@ -44,7 +45,7 @@ struct OverlayView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 20))
                 .foregroundStyle(Theme.text)
-                .focused($searchFocused)
+                .focused($focus, equals: .search)
             holdPill
         }
         .padding(.horizontal, 22)
@@ -197,12 +198,20 @@ struct OverlayView: View {
             if model.isSearching {
                 tabBadge(item.cat)
             }
-            fieldText(item.desc, font: .system(size: 13), color: Theme.fieldText)
-                .frame(width: Theme.descriptionWidth, height: Theme.fieldHeight, alignment: .leading)
-                .background(fieldBackground(Theme.descriptionField, border: Theme.divider))
+            editableField(
+                text: descriptionBinding(item),
+                placeholder: "Beschreibung",
+                focusValue: .description(item.id),
+                font: .system(size: 13),
+                color: Theme.fieldText
+            )
+            .frame(width: Theme.descriptionWidth, height: Theme.fieldHeight, alignment: .leading)
+            .background(fieldBackground(Theme.descriptionField, border: Theme.divider))
 
-            fieldText(
-                item.label,
+            editableField(
+                text: labelBinding(item),
+                placeholder: "Command / Prompt",
+                focusValue: .command(item.id),
                 font: .system(size: 14, weight: isSelected ? .semibold : .regular, design: .monospaced),
                 color: isSelected ? Theme.accent : Theme.text
             )
@@ -241,13 +250,36 @@ struct OverlayView: View {
             )
     }
 
-    private func fieldText(_ value: String, font: Font, color: Color) -> some View {
-        Text(value)
+    /// TextField statt Text: im Fokus scrollt ein langer Wert bis zum
+    /// Zeilenende, in Ruhe kuerzt AppKit mit Ellipsis (M5).
+    private func editableField(
+        text: Binding<String>,
+        placeholder: String,
+        focusValue: OverlayFocus,
+        font: Font,
+        color: Color
+    ) -> some View {
+        TextField(placeholder, text: text)
+            .textFieldStyle(.plain)
             .font(font)
             .foregroundStyle(color)
             .lineLimit(1)
-            .truncationMode(.tail)
+            .focused($focus, equals: focusValue)
             .padding(.horizontal, Theme.fieldPadding)
+    }
+
+    private func descriptionBinding(_ item: LibraryItem) -> Binding<String> {
+        Binding(
+            get: { model.item(id: item.id)?.desc ?? "" },
+            set: { model.update(itemID: item.id, desc: $0) }
+        )
+    }
+
+    private func labelBinding(_ item: LibraryItem) -> Binding<String> {
+        Binding(
+            get: { model.item(id: item.id)?.label ?? "" },
+            set: { model.update(itemID: item.id, label: $0) }
+        )
     }
 
     private func fieldBackground(_ fill: Color, border: Color) -> some View {
@@ -298,9 +330,10 @@ struct OverlayView: View {
         .background(Theme.footer)
     }
 
-    /// Zeichnet den Button; das Anlegen folgt in P5.
+    /// Neue leere Zeile am Ende der letzten Gruppe, direkt fokussiert (SCR-05).
     private var addButton: some View {
         Button {
+            model.addEntry()
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "plus").font(.system(size: 11))

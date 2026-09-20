@@ -72,6 +72,8 @@ final class OverlayPanel: NSPanel {
     func hide() {
         isChangingVisibility = true
         defer { isChangingVisibility = false }
+        // M10: Aenderungen sind spaetestens beim Schliessen auf der Platte.
+        model.save()
         stopKeyMonitor()
         orderOut(nil)
         previousApp?.activate()
@@ -110,7 +112,7 @@ final class OverlayPanel: NSPanel {
         keyMonitor = nil
     }
 
-    /// ⌘C im Suchfeld mit Markierung gehoert dem Feld, nicht der Auswahl.
+    /// ⌘C mit Markierung in einem Textfeld gehoert dem Feld, nicht der Auswahl.
     private var searchFieldHasSelection: Bool {
         guard let editor = firstResponder as? NSTextView else { return false }
         return editor.selectedRange().length > 0
@@ -129,27 +131,31 @@ final class OverlayPanel: NSPanel {
 
         if hasCommand, let digit = event.charactersIgnoringModifiers.flatMap(Int.init),
            (1 ... LibraryStore.tabs.count).contains(digit) {
-            guard !model.isSearching else { return false }
+            guard !model.isSearching, !model.isEditingRow else { return false }
             model.selectTab(number: digit)
             return true
         }
 
         switch event.keyCode {
         case Key.escape:
-            if model.isSearching {
-                model.clearSearch()
-            } else {
-                onRequestClose()
+            let action = model.escapeAction()
+            log.info("esc: editingRow=\(self.model.isEditingRow) searching=\(self.model.isSearching) → \(String(describing: action), privacy: .public)")
+            switch action {
+            case .leaveField: model.leaveField()
+            case .clearSearch: model.clearSearch()
+            case .closePanel: onRequestClose()
             }
             return true
         case Key.up:
+            guard !model.isEditingRow else { return false }
             model.moveSelection(by: -1)
             return true
         case Key.down:
+            guard !model.isEditingRow else { return false }
             model.moveSelection(by: 1)
             return true
         case Key.left, Key.right:
-            guard !model.isSearching else { return false }
+            guard !model.isSearching, !model.isEditingRow else { return false }
             model.cycleTab(by: event.keyCode == Key.left ? -1 : 1)
             return true
         default:

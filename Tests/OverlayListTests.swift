@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 final class OverlayListTests: XCTestCase {
@@ -290,6 +291,188 @@ final class OverlayListTests: XCTestCase {
         XCTAssertEqual(model.selection, 2)
         XCTAssertEqual(spy.written, ["git commit -m"])
         XCTAssertTrue(model.hasCopyFeedback)
+    }
+
+    // MARK: - Editieren (M9)
+
+    func testEditierenAendertBeideFelder() {
+        model.update(itemID: sample[0].id, desc: "Neuer Text")
+        XCTAssertEqual(store.items[0].desc, "Neuer Text")
+        XCTAssertEqual(store.items[0].label, "git status -sb")
+
+        model.update(itemID: sample[0].id, label: "git status")
+        XCTAssertEqual(store.items[0].label, "git status")
+    }
+
+    func testEditierenMitUnbekannterIdIstNoOp() {
+        let vorher = store.items
+        model.update(itemID: UUID(), desc: "egal")
+        XCTAssertEqual(store.items, vorher)
+    }
+
+    func testEditierenLaesstAndereEintraegeUnberuehrt() {
+        model.update(itemID: sample[2].id, desc: "Geändert", label: "git commit")
+        XCTAssertEqual(store.items[2].desc, "Geändert")
+        XCTAssertEqual(store.items[2].label, "git commit")
+        XCTAssertEqual(store.items[0], sample[0])
+        XCTAssertEqual(store.items[4], sample[4])
+    }
+
+    // MARK: - Eintrag anlegen (SCR-05)
+
+    func testNeuerEintragLandetInLetzterGruppeDesAktivenReiters() {
+        let neu = model.addEntry()
+        XCTAssertEqual(neu.cat, "Git")
+        XCTAssertEqual(neu.group, "Committen")
+        XCTAssertEqual(neu.desc, "")
+        XCTAssertEqual(neu.label, "")
+
+        let gruppen = model.sections
+        XCTAssertEqual(gruppen.last?.name, "Committen")
+        XCTAssertEqual(gruppen.last?.items.last?.id, neu.id)
+    }
+
+    func testNeuerEintragImLeerenReiterNutztAllgemein() {
+        model.selectTab("Python")
+        XCTAssertTrue(model.rows.isEmpty)
+
+        let neu = model.addEntry()
+        XCTAssertEqual(neu.cat, "Python")
+        XCTAssertEqual(neu.group, "Allgemein")
+        XCTAssertEqual(model.sections.map(\.name), ["Allgemein"])
+    }
+
+    func testNeuerEintragIstDieLetzteZeileUndAusgewaehlt() {
+        let neu = model.addEntry()
+        XCTAssertEqual(model.rows.count, 4)
+        XCTAssertEqual(model.selection, 3)
+        XCTAssertEqual(model.selectedItem?.id, neu.id)
+    }
+
+    func testNeuerEintragLeertDieSuche() {
+        model.query = "git"
+        XCTAssertTrue(model.isSearching)
+
+        let neu = model.addEntry()
+        XCTAssertEqual(model.query, "")
+        XCTAssertFalse(model.isSearching)
+        XCTAssertEqual(neu.cat, "Git")
+        XCTAssertEqual(model.selectedItem?.id, neu.id)
+    }
+
+    func testNeuerEintragFordertFokusInDerBeschreibung() {
+        let vorher = model.focusRequest
+        let neu = model.addEntry()
+        XCTAssertEqual(model.focusRequest, vorher + 1)
+        XCTAssertEqual(model.requestedFocus, .description(neu.id))
+    }
+
+    func testKopierenEinerLeerenZeileIstNoOp() {
+        let spy = PasteboardSpy()
+        model.writeToPasteboard = spy.write
+        let neu = model.addEntry()
+
+        XCTAssertFalse(model.copy(neu))
+        XCTAssertFalse(model.copySelection())
+        XCTAssertTrue(spy.written.isEmpty)
+        XCTAssertFalse(model.hasCopyFeedback)
+    }
+
+    // MARK: - Fokus (SCR-03)
+
+    func testZeilenfelderGeltenAlsEditieren() {
+        XCTAssertFalse(model.isEditingRow)
+        model.focusedField = .search
+        XCTAssertFalse(model.isEditingRow)
+        model.focusedField = .description(sample[0].id)
+        XCTAssertTrue(model.isEditingRow)
+        model.focusedField = .command(sample[0].id)
+        XCTAssertTrue(model.isEditingRow)
+    }
+
+    func testFeldVerlassenFordertFokusImSuchfeld() {
+        model.focusedField = .command(sample[0].id)
+        let vorher = model.focusRequest
+        model.leaveField()
+        XCTAssertEqual(model.requestedFocus, .search)
+        XCTAssertEqual(model.focusRequest, vorher + 1)
+    }
+
+    // MARK: - Persistenz (M10)
+
+    func testSpeichernSchreibtAenderungInDieDatei() throws {
+        let fileURL = tempDirectory.appendingPathComponent("persist.json")
+        try JSONEncoder().encode(sample).write(to: fileURL)
+        let persistent = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try persistent.load()
+        let persistentModel = OverlayViewModel(store: persistent)
+
+        persistentModel.update(itemID: sample[0].id, desc: "Editiert und gespeichert")
+        persistentModel.addEntry()
+        XCTAssertTrue(persistentModel.save())
+
+        let reloaded = LibraryStore(fileURL: fileURL, seedURL: nil)
+        try reloaded.load()
+        XCTAssertEqual(reloaded.items.count, 6)
+        XCTAssertEqual(reloaded.items.first?.desc, "Editiert und gespeichert")
+    }
+
+    func testSpeichernNachFehlgeschlagenemLadenWirdVerweigert() {
+        // store wurde nie geladen, der isLoaded-Schutz aus P1 greift.
+        XCTAssertFalse(model.save())
+    }
+
+    // MARK: - Beweis Root Cause P5-Bug
+
+    /// Die View beobachtet OverlayViewModel. Aendert sich store.items, muss das
+    /// beim ViewModel ankommen, sonst zeichnet die View nicht neu und das
+    /// TextField liest weiter den alten Wert.
+    func testStoreAenderungBenachrichtigtDasViewModel() {
+        var benachrichtigungen = 0
+        let abo = model.objectWillChange.sink { _ in benachrichtigungen += 1 }
+        defer { abo.cancel() }
+
+        model.update(itemID: sample[0].id, desc: "getippt")
+
+        XCTAssertEqual(store.items[0].desc, "getippt", "Store wurde geschrieben")
+        XCTAssertGreaterThan(benachrichtigungen, 0, "ViewModel meldet die Aenderung nicht weiter")
+    }
+
+    // MARK: - esc-Leiter (M6)
+
+    func testEscapeSchliesstPanelImRuhezustand() {
+        XCTAssertEqual(model.escapeAction(), .closePanel)
+    }
+
+    func testEscapeLeertZuerstDieSuche() {
+        model.query = "git"
+        XCTAssertEqual(model.escapeAction(), .clearSearch)
+    }
+
+    func testEscapeVerlaesstZuerstDasZeilenfeld() {
+        model.focusedField = .description(sample[0].id)
+        XCTAssertEqual(model.escapeAction(), .leaveField)
+
+        // Auch bei gleichzeitig aktiver Suche gewinnt das Feld.
+        model.query = "git"
+        model.focusedField = .command(sample[0].id)
+        XCTAssertEqual(model.escapeAction(), .leaveField)
+    }
+
+    func testEscapeImSuchfeldIstKeinFeldVerlassen() {
+        model.focusedField = .search
+        XCTAssertEqual(model.escapeAction(), .closePanel)
+    }
+
+    func testFeldVerlassenLaesstAuswahlStehenUndSetztZustandSofort() {
+        model.moveSelection(by: 2)
+        model.focusedField = .command(sample[2].id)
+
+        model.leaveField()
+
+        XCTAssertEqual(model.selection, 2, "Auswahl bleibt auf der Zeile")
+        XCTAssertFalse(model.isEditingRow, "Zustand gilt sofort, nicht erst nach dem Neuzeichnen")
+        XCTAssertEqual(model.escapeAction(), .closePanel, "zweites esc schliesst")
     }
 
 }
