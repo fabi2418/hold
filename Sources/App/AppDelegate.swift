@@ -7,19 +7,21 @@ private let log = Logger(subsystem: "com.fabi2418.cheatsheet", category: "app")
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let statusLine = NSMenuItem(title: "", action: #selector(requestAccessibility), keyEquivalent: "")
-    private let panel = OverlayPanel()
     private let monitor = CmdHoldMonitor()
     private let library = LibraryStore()
+    private lazy var model = OverlayViewModel(store: library)
+    private lazy var panel = OverlayPanel(model: model)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log.info("App gestartet (main=\(Thread.isMainThread))")
         loadLibrary()
+        panel.onRequestClose = { [monitor] in monitor.close() }
         monitor.onOpen = { [panel] in
-            log.info("Panel geöffnet (Tap, main=\(Thread.isMainThread))")
+            log.info("Panel eingeblendet (main=\(Thread.isMainThread))")
             panel.show()
         }
         monitor.onClose = { [panel] in
-            log.info("Panel geschlossen (Tap, main=\(Thread.isMainThread))")
+            log.info("Panel ausgeblendet (main=\(Thread.isMainThread))")
             panel.hide()
         }
 
@@ -62,13 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleOverlay() {
-        if panel.isVisible {
-            log.info("Panel geschlossen (Menü-Test)")
-            panel.hide()
-        } else {
-            log.info("Panel geöffnet (Menü-Test)")
-            panel.show()
-        }
+        log.info("Overlay über Menü umgeschaltet")
+        monitor.toggle()
     }
 
     @objc private func requestAccessibility() {

@@ -15,6 +15,8 @@ private func tapCallback(
     return Unmanaged.passUnretained(event)
 }
 
+/// Globaler ⌘-Listener nach M1: ⌘ allein 0,6 s gehalten schaltet das Overlay um.
+/// Loslassen von ⌘ aendert nichts. esc laeuft ueber das Panel (siehe OverlayPanel).
 final class CmdHoldMonitor {
     var holdDuration: TimeInterval = 0.6
     var onOpen: () -> Void = {}
@@ -23,12 +25,13 @@ final class CmdHoldMonitor {
     private static let modifiers: CGEventFlags = [
         .maskCommand, .maskShift, .maskControl, .maskAlternate, .maskSecondaryFn,
     ]
-
     private var tap: CFMachPort?
     private var holdTimer: Timer?
     private var armedAt: TimeInterval = 0
     private var isOpen = false
     private var tainted = false
+    /// Verhindert, dass derselbe ⌘-Halte-Vorgang mehrfach umschaltet.
+    private var firedThisPress = false
 
     var isRunning: Bool { tap != nil }
 
@@ -56,22 +59,37 @@ final class CmdHoldMonitor {
         return true
     }
 
+    /// Schaltet das Overlay um. Auch vom Menue-Eintrag genutzt, damit der
+    /// Monitor und das Panel nie auseinanderlaufen.
+    func toggle() {
+        isOpen.toggle()
+        log.info("Overlay umgeschaltet: isOpen=\(self.isOpen)")
+        if isOpen { onOpen() } else { onClose() }
+    }
+
+    func close() {
+        guard isOpen else { return }
+        isOpen = false
+        log.info("Overlay geschlossen")
+        onClose()
+    }
+
     fileprivate func handle(_ type: CGEventType, _ event: CGEvent) {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             log.error("Tap deaktiviert: type=\(type.rawValue) isOpen=\(self.isOpen) – re-enable")
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
-            cancelHold()
-            if isOpen { isOpen = false; onClose() }
+            reset()
+            close()
         case .flagsChanged:
             let mods = event.flags.intersection(Self.modifiers)
             if !mods.contains(.maskCommand) {
-                log.info("⌘ losgelassen: mods=\(mods.rawValue) isOpen=\(self.isOpen) main=\(Thread.isMainThread)")
+                // Loslassen beendet nur den Halte-Vorgang, es schaltet nicht.
                 cancelHold()
-                if isOpen { isOpen = false; onClose() }
+                firedThisPress = false
                 tainted = !mods.isEmpty
             } else if mods == .maskCommand {
-                if !tainted && !isOpen && holdTimer == nil { arm() }
+                if !tainted && !firedThisPress && holdTimer == nil { arm() }
             } else {
                 tainted = true
                 cancelHold()
@@ -95,6 +113,12 @@ final class CmdHoldMonitor {
         holdTimer = nil
     }
 
+    private func reset() {
+        cancelHold()
+        tainted = false
+        firedThisPress = false
+    }
+
     private func fire() {
         holdTimer = nil
         let held = ProcessInfo.processInfo.systemUptime - armedAt
@@ -106,7 +130,7 @@ final class CmdHoldMonitor {
             tainted = true
             return
         }
-        isOpen = true
-        onOpen()
+        firedThisPress = true
+        toggle()
     }
 }
