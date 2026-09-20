@@ -1,0 +1,66 @@
+import AppKit
+import ApplicationServices
+import os
+
+private let log = Logger(subsystem: "com.fabi2418.cheatsheet", category: "app")
+
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    private let statusLine = NSMenuItem(title: "", action: #selector(requestAccessibility), keyEquivalent: "")
+    private let panel = OverlayPanel()
+    private let monitor = CmdHoldMonitor()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        log.info("App gestartet (main=\(Thread.isMainThread))")
+        monitor.onOpen = { [panel] in
+            log.info("Panel geöffnet (Tap, main=\(Thread.isMainThread))")
+            panel.show()
+        }
+        monitor.onClose = { [panel] in
+            log.info("Panel geschlossen (Tap, main=\(Thread.isMainThread))")
+            panel.hide()
+        }
+
+        let button = statusItem.button
+        button?.image = NSImage(systemSymbolName: "command", accessibilityDescription: "Cheatsheet")
+        if button?.image == nil { button?.title = "⌘" }
+        log.info("StatusItem erzeugt: isVisible=\(self.statusItem.isVisible) button!=nil=\(button != nil) image!=nil=\(button?.image != nil)")
+
+        let menu = NSMenu()
+        menu.delegate = self
+        let test = NSMenuItem(title: "Overlay öffnen (Test)", action: #selector(toggleOverlay), keyEquivalent: "")
+        menu.addItem(test)
+        menu.addItem(statusLine)
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Beenden", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        for item in menu.items where item.action != #selector(NSApplication.terminate(_:)) { item.target = self }
+        statusItem.menu = menu
+
+        let trusted = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+        log.info("Accessibility beim Start: trusted=\(trusted)")
+        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [monitor] timer in
+            if monitor.start() { timer.invalidate() }
+        }
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        let trusted = AXIsProcessTrusted()
+        let tapState = monitor.isRunning ? "Tap aktiv" : "Tap inaktiv"
+        statusLine.title = "Bedienungshilfen: \(trusted ? "erteilt" : "fehlt") · \(tapState)"
+        log.info("Menü geöffnet: trusted=\(trusted) tapRunning=\(self.monitor.isRunning)")
+    }
+
+    @objc private func toggleOverlay() {
+        if panel.isVisible {
+            log.info("Panel geschlossen (Menü-Test)")
+            panel.hide()
+        } else {
+            log.info("Panel geöffnet (Menü-Test)")
+            panel.show()
+        }
+    }
+
+    @objc private func requestAccessibility() {
+        _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+    }
+}
