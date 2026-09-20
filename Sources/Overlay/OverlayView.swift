@@ -158,7 +158,7 @@ struct OverlayView: View {
                 case .group(let name):
                     groupTitle(name)
                 case .item(let item, let index):
-                    row(item, isSelected: index == model.selection)
+                    row(item, index: index, isSelected: index == model.selection)
                         .id(item.id.uuidString)
                         .padding(.bottom, 8)
                 }
@@ -192,7 +192,7 @@ struct OverlayView: View {
             .padding(.bottom, 2)
     }
 
-    private func row(_ item: LibraryItem, isSelected: Bool) -> some View {
+    private func row(_ item: LibraryItem, index: Int, isSelected: Bool) -> some View {
         HStack(spacing: Theme.rowGap) {
             if model.isSearching {
                 tabBadge(item.cat)
@@ -210,7 +210,7 @@ struct OverlayView: View {
             .frame(height: Theme.fieldHeight)
             .background(fieldBackground(Theme.commandField, border: Theme.border))
 
-            copyButton
+            copyButton(for: item, index: index)
         }
         .padding(.vertical, 4)
         .padding(.horizontal, Theme.rowInset)
@@ -259,13 +259,26 @@ struct OverlayView: View {
             )
     }
 
-    /// Zeichnet den Button; das Kopieren selbst folgt in P4.
-    private var copyButton: some View {
-        Image(systemName: "doc.on.doc")
-            .font(.system(size: 16))
-            .foregroundStyle(Theme.fieldText)
-            .frame(width: Theme.copyButtonWidth, height: Theme.fieldHeight)
-            .background(fieldBackground(Theme.commandField, border: Theme.border))
+    /// Kopiert die Zeile und setzt die Auswahl dorthin (M8).
+    /// Gefuellter Zustand ist das Feedback nach SCR-04.
+    private func copyButton(for item: LibraryItem, index: Int) -> some View {
+        let isCopied = model.copiedItemID == item.id
+        return Button {
+            model.select(index: index)
+            model.copy(item)
+        } label: {
+            Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
+                .font(.system(size: 16))
+                .foregroundStyle(isCopied ? Color.white : Theme.fieldText)
+                .frame(width: Theme.copyButtonWidth, height: Theme.fieldHeight)
+                .background(
+                    fieldBackground(
+                        isCopied ? Theme.accent : Theme.commandField,
+                        border: isCopied ? Theme.accent : Theme.border
+                    )
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Fussleiste
@@ -276,9 +289,9 @@ struct OverlayView: View {
             Spacer()
             hints
             Spacer()
-            Text("\(model.rows.count) Einträge")
+            Text(model.statusText)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.secondary)
+                .foregroundStyle(model.hasCopyFeedback ? Theme.accent : Theme.secondary)
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 10)

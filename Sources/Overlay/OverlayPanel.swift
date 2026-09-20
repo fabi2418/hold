@@ -22,6 +22,7 @@ final class OverlayPanel: NSPanel {
         static let right: UInt16 = 124
         static let down: UInt16 = 125
         static let up: UInt16 = 126
+        static let c: UInt16 = 8
     }
 
     init(model: OverlayViewModel) {
@@ -109,8 +110,22 @@ final class OverlayPanel: NSPanel {
         keyMonitor = nil
     }
 
+    /// ⌘C im Suchfeld mit Markierung gehoert dem Feld, nicht der Auswahl.
+    private var searchFieldHasSelection: Bool {
+        guard let editor = firstResponder as? NSTextView else { return false }
+        return editor.selectedRange().length > 0
+    }
+
     private func handle(_ event: NSEvent) -> Bool {
         let hasCommand = event.modifierFlags.contains(.command)
+        let hasControl = event.modifierFlags.contains(.control)
+
+        if isCopyKey(event) {
+            if hasCommand && searchFieldHasSelection { return false }
+            guard hasCommand || hasControl else { return false }
+            model.copySelection()
+            return true
+        }
 
         if hasCommand, let digit = event.charactersIgnoringModifiers.flatMap(Int.init),
            (1 ... LibraryStore.tabs.count).contains(digit) {
@@ -140,5 +155,10 @@ final class OverlayPanel: NSPanel {
         default:
             return false
         }
+    }
+
+    private func isCopyKey(_ event: NSEvent) -> Bool {
+        if event.charactersIgnoringModifiers?.lowercased() == "c" { return true }
+        return event.keyCode == Key.c
     }
 }

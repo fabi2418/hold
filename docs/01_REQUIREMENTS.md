@@ -48,6 +48,7 @@ Aus jedem Reiter lässt sich ein Eintrag in unter 2 Sekunden kopieren (⌘ halte
 - Einfügen statt nur Kopieren (CGEvent ⌘V simulieren) — zusätzliche Berechtigungsfragen prüfen.
 - Reiter frei konfigurierbar; Export/Import der Library.
 - Sichtbarer Hinweis im Overlay, wenn `library.json` nicht geladen werden konnte (aktuell nur Log, Panel bleibt leer).
+- Menü-Eintrag „Overlay öffnen (Test)" kollidiert mit dem Schließen bei Fokusverlust (Panel schließt und öffnet sofort wieder). Entfernen oder umbauen, wenn er nach P0 noch gebraucht wird.
 
 ## Edge Cases (aus den SCR-Karten)
 - Auswahl-Index bei Filterwechsel auf gültigen Bereich klemmen; ⌘C ohne sichtbare Zeile: no-op.

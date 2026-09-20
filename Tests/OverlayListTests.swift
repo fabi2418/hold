@@ -181,4 +181,115 @@ final class OverlayListTests: XCTestCase {
         XCTAssertEqual(model.selection, 0)
         XCTAssertEqual(model.focusRequest, 1)
     }
+    // MARK: - Kopieren (M8)
+
+    /// Faengt Pasteboard-Schreibzugriffe ab, damit Tests die echte
+    /// Zwischenablage nicht anfassen.
+    private final class PasteboardSpy {
+        private(set) var written: [String] = []
+        var succeeds = true
+
+        func write(_ text: String) -> Bool {
+            guard succeeds else { return false }
+            written.append(text)
+            return true
+        }
+    }
+
+    func testKopierenSchreibtLabelUndSetztFeedback() {
+        let spy = PasteboardSpy()
+        model.writeToPasteboard = spy.write
+
+        XCTAssertTrue(model.copySelection())
+        XCTAssertEqual(spy.written, ["git status -sb"])
+        XCTAssertEqual(model.copiedItemID, sample[0].id)
+        XCTAssertTrue(model.hasCopyFeedback)
+        XCTAssertEqual(model.statusText, "Kopiert")
+    }
+
+    func testKopierenEinerBestimmtenZeile() {
+        let spy = PasteboardSpy()
+        model.writeToPasteboard = spy.write
+
+        XCTAssertTrue(model.copy(sample[4]))
+        XCTAssertEqual(spy.written, ["ls -la"])
+        XCTAssertEqual(model.copiedItemID, sample[4].id)
+    }
+
+    func testKopierenOhneSichtbareZeileIstNoOp() {
+        let spy = PasteboardSpy()
+        model.writeToPasteboard = spy.write
+        model.query = "xyzzy"
+
+        XCTAssertNil(model.selectedItem)
+        XCTAssertFalse(model.copySelection())
+        XCTAssertTrue(spy.written.isEmpty)
+        XCTAssertFalse(model.hasCopyFeedback)
+    }
+
+    func testPasteboardFehlerSetztKeinFeedback() {
+        let spy = PasteboardSpy()
+        spy.succeeds = false
+        model.writeToPasteboard = spy.write
+
+        XCTAssertFalse(model.copySelection())
+        XCTAssertNil(model.copiedItemID)
+        XCTAssertFalse(model.hasCopyFeedback)
+    }
+
+    func testStatustextOhneFeedbackZeigtZeilenzahl() {
+        XCTAssertEqual(model.statusText, "3 Einträge")
+    }
+
+    // MARK: - Feedback endet bei der naechsten Aktion
+
+    private func kopiereZeileEins() {
+        let spy = PasteboardSpy()
+        model.writeToPasteboard = spy.write
+        model.copySelection()
+        XCTAssertTrue(model.hasCopyFeedback)
+    }
+
+    func testFeedbackEndetBeiAuswahlwechsel() {
+        kopiereZeileEins()
+        model.moveSelection(by: 1)
+        XCTAssertFalse(model.hasCopyFeedback)
+    }
+
+    func testFeedbackEndetBeiReiterwechsel() {
+        kopiereZeileEins()
+        model.selectTab("zsh")
+        XCTAssertFalse(model.hasCopyFeedback)
+    }
+
+    func testFeedbackEndetBeiSuchaenderung() {
+        kopiereZeileEins()
+        model.query = "git"
+        XCTAssertFalse(model.hasCopyFeedback)
+    }
+
+    func testFeedbackEndetBeiKlickAufAndereZeile() {
+        kopiereZeileEins()
+        model.select(index: 2)
+        XCTAssertFalse(model.hasCopyFeedback)
+    }
+
+    func testFeedbackEndetBeimOeffnen() {
+        kopiereZeileEins()
+        model.prepareForOpen()
+        XCTAssertFalse(model.hasCopyFeedback)
+    }
+
+    func testKlickAufCopyButtonSetztAuswahlUndKopiert() {
+        let spy = PasteboardSpy()
+        model.writeToPasteboard = spy.write
+
+        // wie der Button: erst Auswahl setzen, dann kopieren
+        model.select(index: 2)
+        XCTAssertTrue(model.copy(sample[2]))
+        XCTAssertEqual(model.selection, 2)
+        XCTAssertEqual(spy.written, ["git commit -m"])
+        XCTAssertTrue(model.hasCopyFeedback)
+    }
+
 }
