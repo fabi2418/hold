@@ -34,9 +34,52 @@ und lokal signiert; ein fertiges Installationspaket gibt es nicht.
 Die App hat bewusst kein Dock-Icon (`LSUIElement`). Sie meldet sich nur mit einem ⌘-Symbol in der
 Menüleiste.
 
-> **Signierung:** `project.yml` enthält `DEVELOPMENT_TEAM: 9ZV3YZX4YG`. Für einen Build auf einem
-> anderen Rechner diesen Wert durch die eigene Team-ID ersetzen:
-> `security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject` — die ID steht im Feld `OU=`.
+## Signierung einrichten
+
+Ohne weiteres Zutun signiert der Build **ad-hoc** („Sign to Run Locally"). Das baut und läuft,
+hat aber einen Haken: Bei jedem Rebuild ändert sich der Code-Hash, und macOS behandelt die
+Accessibility-Freigabe dann als veraltet — der Schalter steht auf „an", der Tap wird trotzdem nicht
+erzeugt. Wer öfter baut, trägt deshalb eine eigene Team-ID ein.
+
+1. **Team-ID auslesen.** Dafür braucht es ein Apple-Development-Zertifikat im Schlüsselbund; eine
+   kostenlose Apple-ID genügt (Xcode → Settings → Accounts → Apple-ID hinzufügen →
+   Manage Certificates → „+" → Apple Development).
+   ```
+   security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject
+   ```
+   Ausgabe (gekürzt):
+   ```
+   subject=UID=…, CN=Apple Development: name@example.com (…), OU=ABCDE12345, O=…, C=US
+   ```
+   Die Team-ID ist der Wert hinter **`OU=`** — nicht der hinter `UID=` und nicht der in Klammern
+   hinter dem `CN`.
+
+2. **Lokale Konfiguration anlegen.** Die Datei liegt bewusst nicht im Repository und ist in
+   `.gitignore` eingetragen:
+   ```
+   cat > Config/Signing.local.xcconfig <<'EOF'
+   CODE_SIGN_STYLE = Automatic
+   CODE_SIGN_IDENTITY = Apple Development
+   DEVELOPMENT_TEAM = ABCDE12345
+   EOF
+   ```
+   `ABCDE12345` durch die eigene ID aus Schritt 1 ersetzen.
+
+3. **Neu erzeugen und bauen.**
+   ```
+   xcodegen generate
+   xcodebuild -project Hold.xcodeproj -scheme Hold -configuration Release -derivedDataPath build build
+   ```
+   Kontrolle:
+   ```
+   codesign -dv --verbose=2 build/Build/Products/Release/Hold.app
+   ```
+   `TeamIdentifier` muss die eigene ID zeigen, nicht `not set`.
+
+Wie das zusammenspielt: `Config/Signing.xcconfig` liegt im Repo und setzt die ad-hoc-Voreinstellung.
+Seine letzte Zeile ist `#include? "Signing.local.xcconfig"` — das Fragezeichen macht den Include
+optional, auf einem Rechner ohne diese Datei wird die Zeile stillschweigend übersprungen. Ist sie da,
+überschreiben ihre Werte die Voreinstellung.
 
 ## Accessibility-Berechtigung erteilen
 
@@ -202,6 +245,7 @@ open build/Build/Products/Debug/Hold.app
 | `Sources/Overlay` | `OverlayPanel` (NSPanel, Fokus, Tasten), `OverlayView` (SwiftUI), `Theme` |
 | `Sources/Model` | `LibraryItem`, `LibraryStore` (Laden, Speichern, Umbenennen, Löschen), `LibraryOrder` (Sortierlogik), `OverlayViewModel` |
 | `Tests` | 133 Unit-Tests auf `Sources/Model` |
+| `Config/Signing.xcconfig` | Signierung, ad-hoc als Voreinstellung |
 | `Resources/seed.json` | Start-Library |
 | `docs/` | Anforderungen, Paketplan, Referenzen, Re-Entry |
 

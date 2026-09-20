@@ -13,7 +13,9 @@ Alle MUSS-Anforderungen M1–M11 sind umgesetzt. **133 Unit-Tests, alle grün.**
 ## Stack
 
 Swift 5, SwiftUI plus AppKit, macOS 14.0, XcodeGen (`project.yml`, kein eingechecktes `.xcodeproj`),
-Signierung mit Apple Development, Team `9ZV3YZX4YG`, Bundle-ID `com.fabi2418.hold`.
+Bundle-ID `com.fabi2418.hold`. Signierung ueber `Config/Signing.xcconfig`: ad-hoc als
+Voreinstellung, ueberschreibbar durch das gitignorierte `Config/Signing.local.xcconfig`
+(hier: Apple Development, Team `9ZV3YZX4YG`). Siehe README, „Signierung einrichten“.
 
 ```
 xcodegen generate

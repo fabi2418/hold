@@ -21,9 +21,9 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_LSUIElement: YES
         ENABLE_APP_SANDBOX: NO
-        CODE_SIGN_STYLE: Automatic
-        CODE_SIGN_IDENTITY: "Apple Development"
-        DEVELOPMENT_TEAM: 9ZV3YZX4YG
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
   HoldTests:
     type: bundle.unit-test
     platform: macOS
@@ -35,8 +35,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.fabi2418.hold.tests
         GENERATE_INFOPLIST_FILE: YES
-        CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: 9ZV3YZX4YG
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
 schemes:
   Hold:
     build:
