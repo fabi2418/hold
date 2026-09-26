@@ -89,6 +89,33 @@ Abnahme:
 - [ ] Nach einer anderen Aktion (Auswahl, Kopieren, Suche) ist ⌘Z wirkungslos und der Fußzeilenhinweis weg
 - [ ] Bei aktiver Suche, im Editierfeld und während einer Umbenennung löscht ⌫ nichts
 
+## P11 · Horizontal scrollbare Reiterleiste (v1.1) — abgenommen
+Problem: Bei vielen Reitern läuft die Reiterleiste rechts aus dem Panel (1080 pt). Reiter ab ⌘8 sind abgeschnitten und per Maus nicht erreichbar.
+
+Ziel: Alle Reiter bleiben erreichbar, weil sich die Reiterleiste horizontal scrollen lässt, mit einer sichtbaren Schiebeleiste von links nach rechts.
+
+Umfang:
+- Das HStack mit den Reitern in `OverlayView` kommt in `ScrollView(.horizontal)`. Die Höhe der Leiste bleibt unverändert.
+- Die Scrollbar ist sichtbar: `.scrollIndicators(.visible)`. Prüfen, ob sie bei „Rollbalken einblenden: Automatisch" dauerhaft sichtbar bleibt; falls nicht, mit Beleg melden und Lösung vorschlagen (z. B. `NSScrollView` mit `scrollerStyle = .legacy` über `NSViewRepresentable`), noch nicht bauen.
+- Die Scrollbar verdeckt den 2-pt-Unterstrich des aktiven Reiters nicht; falls nötig, unten Abstand.
+- Auto-Scroll: Reiterwechsel per ⌘1–n, ←→, Klick oder Suche scrollt den aktiven Reiter in den sichtbaren Bereich (`ScrollViewReader` + `scrollTo(id, anchor: .center)` per `onChange(of: activeTab)`). Auch beim Öffnen des Overlays ist der aktive Reiter sichtbar.
+- „Reiter hinzufügen" bleibt außerhalb der ScrollView rechts fest verankert.
+- Unverändert: Drag-Sortieren (P8), Umbenennen per Doppelklick (K3), ×-Löschen mit Undo (P9).
+
+Abnahme:
+- [x] Mit ≥ 10 Reitern: jeder Reiter lässt sich per Scrollbar-Drag erreichen
+- [x] Trackpad-Wischen horizontal scrollt die Leiste
+- [x] Scrollbar ist ohne Scrollen sichtbar, auch bei Systemeinstellung „Automatisch" (sonst als offen melden) — akzeptiert im aktuellen Stand (Iterationsliste)
+- [x] Unterstrich des aktiven Reiters wird nicht verdeckt — akzeptiert im aktuellen Stand (Iterationsliste)
+- [x] ⌘8/⌘9 und ←→ über den Rand hinaus: Der aktive Reiter scrollt ins Bild
+- [x] Overlay neu öffnen mit aktivem Reiter ganz rechts: Der Reiter ist sichtbar
+- [x] Drag-Sortieren, Umbenennen, ×-Löschen + ⌘Z funktionieren weiterhin
+- [x] Bei wenigen Reitern: kein Layoutsprung, keine leere Scrollbar — akzeptiert im aktuellen Stand (Iterationsliste)
+- [x] Build grün, alle bestehenden Tests grün
+- [x] Reiter-Drag nach links/rechts, ⌘-Nummern folgen der Position, übersteht Neustart
+- [x] Mausrad vertikal scrollt die Reiterleiste — akzeptiert im aktuellen Stand (Iterationsliste)
+- [x] Optik mit Maus und mit Trackpad: Unterstrich auf Trennlinie, kein dicker Strich — akzeptiert im aktuellen Stand (Iterationsliste)
+
 ## P7 · Release
 Release-Build, README (Installation, Berechtigung, Bedienung), Tag v1.0, Re-Entry-Doku.
 Abnahme:

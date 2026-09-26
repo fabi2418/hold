@@ -50,6 +50,7 @@ Aus jedem Reiter lässt sich ein Eintrag in unter 2 Sekunden kopieren (⌘ halte
 - Export/Import der Library.
 - Sichtbarer Hinweis im Overlay, wenn `library.json` nicht geladen werden konnte (aktuell nur Log, Panel bleibt leer).
 - Menü-Eintrag „Overlay öffnen (Test)" kollidiert mit dem Schließen bei Fokusverlust (Panel schließt und öffnet sofort wieder). Entfernen oder umbauen, wenn er nach P0 noch gebraucht wird.
+- Reiterleiste: vertikales Mausrad scrollt horizontal; dezenter Scroll-Indikator (Varianten A/B/C aus P11).
 
 ## Edge Cases (aus den SCR-Karten)
 - Auswahl-Index bei Filterwechsel auf gültigen Bereich klemmen; ⌘C ohne sichtbare Zeile: no-op.

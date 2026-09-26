@@ -74,21 +74,48 @@ struct OverlayView: View {
 
     // MARK: - Reiter
 
+    /// Horizontal scrollbar, damit bei vielen Reitern keiner rechts aus dem
+    /// Panel faellt (P11). "+" liegt ausserhalb und bleibt immer erreichbar.
     private var tabBar: some View {
-        HStack(spacing: 4) {
-            ForEach(model.tabs, id: \.self) { tab in
-                tabButton(tab, shortcut: model.shortcut(for: tab))
-                    .overlay(alignment: .leading) { dropLine(for: .tab(tab), vertical: true) }
-                    .onDrag { beginDrag(.tab(tab)) }
-                    .onDrop(of: [.text], isTargeted: targetBinding(.tab(tab))) { _ in
-                        drop(before: .tab(tab))
+        HStack(spacing: 12) {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    HStack(spacing: 4) {
+                        ForEach(model.tabs, id: \.self) { tab in
+                            tabButton(tab, shortcut: model.shortcut(for: tab))
+                                .id(tab)
+                                .overlay(alignment: .leading) { dropLine(for: .tab(tab), vertical: true) }
+                                .onDrag { beginDrag(.tab(tab)) }
+                                .onDrop(of: [.text], isTargeted: targetBinding(.tab(tab))) { _ in
+                                    drop(before: .tab(tab))
+                                }
+                        }
                     }
+                    // Platz fuer den Overlay-Scroller (16 pt, gemessen mit
+                    // NSScroller.scrollerWidth), damit er den Unterstrich nicht verdeckt.
+                    .padding(.bottom, 16)
+                }
+                .scrollIndicators(.visible)
+                // Feste Hoehe: das Panel misst seine Hoehe nur einmal beim Start.
+                .frame(height: 44 + 16)
+                .onAppear { scrollToActiveTab(proxy) }
+                .onChange(of: model.activeTab) { scrollToActiveTab(proxy) }
+                .onChange(of: model.focusRequest) {
+                    if model.requestedFocus == .search { scrollToActiveTab(proxy) }
+                }
             }
             addTabButton
-            Spacer()
+                .padding(.bottom, 16)
         }
         .padding(.horizontal, 22)
         .onDrop(of: [.text], isTargeted: nil) { _ in drop(before: nil) }
+    }
+
+    private func scrollToActiveTab(_ proxy: ScrollViewProxy) {
+        guard !model.activeTab.isEmpty else { return }
+        withAnimation(.easeOut(duration: 0.12)) {
+            proxy.scrollTo(model.activeTab, anchor: .center)
+        }
     }
 
     @ViewBuilder
@@ -123,44 +150,45 @@ struct OverlayView: View {
 
     private func tabLabel(_ tab: String, shortcut: Int?) -> some View {
         let isActive = tab == model.activeTab && !model.isSearching
-        return Button {
-            model.selectTab(tab)
-        } label: {
-            HStack(spacing: 4) {
-                Text(tab)
-                    .font(.system(size: 14, weight: isActive ? .semibold : .medium))
-                    .foregroundStyle(isActive ? Theme.text : Theme.secondary)
-                Text("\(store.items(in: tab).count)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(isActive ? Theme.text : Theme.secondary)
-                    .opacity(0.65)
-                if let shortcut {
-                    Text("⌘\(shortcut)")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(Theme.secondary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 4)
-                                .strokeBorder(Theme.border, lineWidth: 1)
-                        )
-                }
-                if model.canDeleteTab(tab) {
-                    deleteButton { model.deleteTab(tab) }
-                }
+        // Kein Button: dessen Maus-Tracking schluckt das Ziehen, onDrag
+        // startet dann nie (P11-Nacharbeit, seit P8 so).
+        return HStack(spacing: 4) {
+            Text(tab)
+                .font(.system(size: 14, weight: isActive ? .semibold : .medium))
+                .foregroundStyle(isActive ? Theme.text : Theme.secondary)
+            Text("\(store.items(in: tab).count)")
+                .font(.system(size: 12))
+                .foregroundStyle(isActive ? Theme.text : Theme.secondary)
+                .opacity(0.65)
+            if let shortcut {
+                Text("⌘\(shortcut)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Theme.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .strokeBorder(Theme.border, lineWidth: 1)
+                    )
             }
-            .fixedSize()
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .frame(minHeight: 44)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(isActive ? Theme.accent : .clear)
-                    .frame(height: 2)
+            if model.canDeleteTab(tab) {
+                deleteButton { model.deleteTab(tab) }
             }
         }
-        .buttonStyle(.plain)
+        .fixedSize()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(minHeight: 44)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(isActive ? Theme.accent : .clear)
+                .frame(height: 2)
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
         .onTapGesture(count: 2) { model.beginRename(.tab(tab)) }
+        .simultaneousGesture(TapGesture().onEnded { model.selectTab(tab) })
     }
 
     /// Eingabefeld fuer Reiter- und Gruppennamen (K3). Enter uebernimmt,
